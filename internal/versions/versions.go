@@ -18,7 +18,7 @@ const (
 	findByOSQuery               = `SELECT * FROM go_versions WHERE os = ?;`
 	findByArchQuery             = `SELECT * FROM go_versions WHERE arch = ?;`
 	findByKindQuery             = `SELECT * FROM go_versions WHERE kind = ?;`
-	findByStableQuery           = `SELECT * FROM go_versions WHERE stable = ?;`
+	findByStableQuery           = `SELECT * FROM go_versions WHERE stable = true;`
 	findByOSArchQuery           = `SELECT * FROM go_versions WHERE os = ? AND arch = ?;`
 	findByOSKindQuery           = `SELECT * FROM go_versions WHERE os = ? AND kind = ?;`
 	findByArchKindQuery         = `SELECT * FROM go_versions WHERE arch = ? AND kind = ?;`
@@ -74,16 +74,13 @@ func NewMapVersions(goVer *versions.GoVersion) (*MapVersions, error) {
 		}
 	}(tx)
 
-	if _, err = tx.ExecContext(ctx, insertLatestQuery, goVer.Versions[0].Version, goVer.Versions[0].Stable, goVer.ReleaseCandidate); err != nil {
+	if _, err = tx.ExecContext(ctx, insertLatestQuery, goVer.StableVersion, true, goVer.ReleaseCandidate); err != nil {
 		return nil, err
 	}
 
 	for i := range goVer.Versions {
-		for j := range goVer.Versions[i].Files {
-			item := goVer.Versions[i]
-			file := item.Files[j]
-
-			if _, err = tx.ExecContext(ctx, insertQuery, item.Version, item.Stable, file.Filename, file.Os, file.Arch, file.Sha256, file.Size, file.Kind); err != nil {
+		for _, file := range goVer.Versions[i].Files {
+			if _, err = tx.ExecContext(ctx, insertQuery, goVer.Versions[i].Version, goVer.Versions[i].Stable, file.Filename, file.Os, file.Arch, file.Sha256, file.Size, file.Kind); err != nil {
 				continue
 			}
 		}
@@ -92,6 +89,135 @@ func NewMapVersions(goVer *versions.GoVersion) (*MapVersions, error) {
 	if err = tx.Commit(); err != nil {
 		return nil, err
 	}
-
 	return &MapVersions{db: db}, nil
+}
+
+func (m *MapVersions) GetAll() ([]*versions.Versions, error) {
+	var v []*versions.Versions
+	if err := m.db.Select(&v, findAllQuery); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+func (m *MapVersions) GetByID(id int) (*versions.Versions, error) {
+	var v versions.Versions
+	if err := m.db.Get(&v, findByIDQuery, id); err != nil {
+		return nil, err
+	}
+	return &v, nil
+}
+
+func (m *MapVersions) GetByVer(version string) (*versions.Versions, error) {
+	var v versions.Versions
+	if err := m.db.Get(&v, findByVerQuery, version); err != nil {
+		return nil, err
+	}
+	return &v, nil
+}
+
+func (m *MapVersions) GetByOS(os string) ([]*versions.Versions, error) {
+	var v []*versions.Versions
+	if err := m.db.Select(&v, findByOSQuery, os); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+func (m *MapVersions) GetByArch(arch string) ([]*versions.Versions, error) {
+	var v []*versions.Versions
+	if err := m.db.Select(&v, findByArchQuery, arch); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+func (m *MapVersions) GetByKind(kind string) ([]*versions.Versions, error) {
+	var v []*versions.Versions
+	if err := m.db.Select(&v, findByKindQuery, kind); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+func (m *MapVersions) GetByStable() ([]*versions.Versions, error) {
+	var v []*versions.Versions
+	if err := m.db.Select(&v, findByStableQuery); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+func (m *MapVersions) GetByOSArch(os, arch string) ([]*versions.Versions, error) {
+	var v []*versions.Versions
+	if err := m.db.Select(&v, findByOSArchQuery, os, arch); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+func (m *MapVersions) GetByOSKind(os, kind string) ([]*versions.Versions, error) {
+	var v []*versions.Versions
+	if err := m.db.Select(&v, findByOSKindQuery, os, kind); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+func (m *MapVersions) GetByArchKind(arch, kind string) ([]*versions.Versions, error) {
+	var v []*versions.Versions
+	if err := m.db.Select(&v, findByArchKindQuery, arch, kind); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+func (m *MapVersions) GetByOSArchKind(os, arch, kind string) ([]*versions.Versions, error) {
+	var v []*versions.Versions
+	if err := m.db.Select(&v, findByOSArchKindQuery, os, arch, kind); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+func (m *MapVersions) GetByOSArchStable(os, arch string, stable bool) ([]*versions.Versions, error) {
+	var v []*versions.Versions
+	if err := m.db.Select(&v, findByOSArchStableQuery, os, arch, stable); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+func (m *MapVersions) GetByOSArchKindStable(os, arch, kind string, stable bool) ([]*versions.Versions, error) {
+	var v []*versions.Versions
+	if err := m.db.Select(&v, findByOSArchKindStableQuery, os, arch, kind, stable); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+func (m *MapVersions) GetBySha256(sha256 string) (*versions.Versions, error) {
+	var v versions.Versions
+	if err := m.db.Get(&v, findBySha256Query, sha256); err != nil {
+		return nil, err
+	}
+	return &v, nil
+}
+
+func (m *MapVersions) GetLatest() (*versions.GoVersion, error) {
+	var v versions.GoVersion
+	if err := m.db.Get(&v, findLatestQuery); err != nil {
+		return nil, err
+	}
+	return &v, nil
+}
+
+func (m *MapVersions) Update(v *versions.Versions) error {
+	_, err := m.db.Exec(updateQuery, v.Version, v.Stable, v.Files[0].Filename, v.Files[0].Os, v.Files[0].Arch, v.Files[0].Sha256, v.Files[0].Size, v.Files[0].Kind, v.ID)
+	return err
+}
+
+func (m *MapVersions) Delete(id int) error {
+	_, err := m.db.Exec(deleteQuery, id)
+	return err
 }

@@ -56,6 +56,7 @@ type File struct {
 }
 
 type Versions struct {
+	ID      int    `json:"id"`
 	Version string `json:"version"`
 	Stable  bool   `json:"stable"`
 	Files   []File `json:"files"`
@@ -92,7 +93,7 @@ func (g *Versions) GetDarwin() (*File, bool) {
 }
 
 type GoVersion struct {
-	Stable           string     `json:"stable"`
+	StableVersion    string     `json:"stable"`
 	Versions         []Versions `json:"versions"`
 	ReleaseCandidate string     `json:"release_candidate"`
 }
@@ -122,7 +123,7 @@ func NewGoVersion() (*GoVersion, error) {
 	})
 
 	return &GoVersion{
-		Stable:           goVer.Versions[0].Version,
+		StableVersion:    goVer.Versions[0].Version,
 		ReleaseCandidate: releaseCandidate,
 		Versions:         goVer.Versions,
 	}, nil

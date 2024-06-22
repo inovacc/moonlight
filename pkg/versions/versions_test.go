@@ -12,7 +12,7 @@ func TestGetGoVersions(t *testing.T) {
 		return
 	}
 
-	version := newGoVersions.Stable
+	version := newGoVersions.StableVersion
 	if version == "" {
 		t.Errorf("NewGoVersion() = %v, want a valid version", version)
 	}
