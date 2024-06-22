@@ -1,34 +1,19 @@
 package versions
 
 import (
+	"moonligth/pkg/versions"
 	"testing"
 )
 
-func TestGetGoVersions(t *testing.T) {
-	newGoVersions, err := NewGoVersion()
+func TestNewMapVersions(t *testing.T) {
+	goVer, err := versions.NewGoVersion()
 	if err != nil {
-		t.Errorf("NewGoVersion() error = %v", err)
-		return
+		t.Fatal(err)
 	}
 
-	goVer, err := newGoVersions.GetGoVersion()
+	mapVerse, err := NewMapVersions(goVer)
 	if err != nil {
-		t.Errorf("GetGoVersions() error = %v", err)
-		return
+		t.Fatal(err)
 	}
-
-	if len(goVer.Version) == 0 {
-		t.Errorf("GetGoVersions() got = %v, want > 0", len(goVer.Version))
-	}
-
-	version, ok := goVer.GetWindows()
-	if !ok {
-		t.Errorf("GetWindows() got = %v, want true", ok)
-	}
-
-	if version == nil {
-		t.Errorf("GetWindows() got = %v, want not nil", version)
-	}
-
-	t.Logf("Go version: %v", version)
+	defer mapVerse.db.Close()
 }
