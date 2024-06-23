@@ -45,57 +45,29 @@ const (
 	osWindows osString = "windows"
 )
 
-type File struct {
-	Filename string `json:"filename"`
-	Os       string `json:"os"`
-	Arch     string `json:"arch"`
-	Version  string `json:"version"`
-	Sha256   string `json:"sha256"`
-	Size     int    `json:"size"`
-	Kind     string `json:"kind"`
-}
-
 type Versions struct {
-	ID      int    `json:"id"`
-	Version string `json:"version"`
-	Stable  bool   `json:"stable"`
-	Files   []File `json:"files"`
+	ID      int    `json:"id,omitempty"`
+	Version string `json:"version,omitempty"`
+	Stable  bool   `json:"stable,omitempty"`
+	Files   []File `json:"files,omitempty"`
 }
 
-// GetWindows returns the Windows file and a boolean indicating if it was found.
-func (g *Versions) GetWindows() (*File, bool) {
-	for _, f := range g.Files {
-		if f.Os == string(osWindows) && f.Arch == string(archAmd64) && f.Kind == string(kindArchive) {
-			return &f, true
-		}
-	}
-	return nil, false
-}
-
-// GetLinux returns the Linux file and a boolean indicating if it was found.
-func (g *Versions) GetLinux() (*File, bool) {
-	for _, f := range g.Files {
-		if f.Os == string(osLinux) && f.Arch == string(archAmd64) && f.Kind == string(kindArchive) {
-			return &f, true
-		}
-	}
-	return nil, false
-}
-
-// GetDarwin returns the Darwin file and a boolean indicating if it was found.
-func (g *Versions) GetDarwin() (*File, bool) {
-	for _, f := range g.Files {
-		if f.Os == string(osDarwin) && f.Arch == string(archAmd64) && f.Kind == string(kindArchive) {
-			return &f, true
-		}
-	}
-	return nil, false
+type File struct {
+	ID       int    `json:"id,omitempty"`
+	Version  string `json:"version,omitempty"`
+	Stable   bool   `json:"stable,omitempty"`
+	Filename string `json:"filename,omitempty"`
+	Os       string `json:"os,omitempty"`
+	Arch     string `json:"arch,omitempty"`
+	Sha256   string `json:"sha256,omitempty"`
+	Size     int    `json:"size,omitempty"`
+	Kind     string `json:"kind,omitempty"`
 }
 
 type GoVersion struct {
-	StableVersion    string     `json:"stable"`
-	Versions         []Versions `json:"versions"`
-	ReleaseCandidate string     `json:"release_candidate"`
+	StableVersion    string     `json:"stable,omitempty"`
+	Versions         []Versions `json:"versions,omitempty"`
+	ReleaseCandidate string     `json:"release_candidate,omitempty"`
 }
 
 // NewGoVersion returns a new GoVersion.
