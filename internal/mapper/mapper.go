@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"github.com/inovacc/dataprovider"
 	"github.com/jmoiron/sqlx"
-	"moonligth/pkg/versions"
+	"moonlight/pkg/versions"
 	"time"
 )
 

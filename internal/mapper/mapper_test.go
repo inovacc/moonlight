@@ -2,7 +2,7 @@ package mapper
 
 import (
 	"github.com/stretchr/testify/assert"
-	"moonligth/pkg/versions"
+	"moonlight/pkg/versions"
 	"testing"
 )
 
