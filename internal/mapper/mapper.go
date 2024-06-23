@@ -78,6 +78,61 @@ type MapVersions struct {
 }
 
 func NewMapVersions(goVer *versions.GoVersion) (*MapVersions, error) {
+	m := &MapVersions{}
+
+	if err := m.settingDatabase(); err != nil {
+		return nil, err
+	}
+
+	if err := m.checkLatestVersion(goVer); err != nil {
+		return nil, err
+	}
+
+	if err := m.compareExistingFiles(goVer); err != nil {
+		return nil, err
+	}
+
+	if len(goVer.Versions) > 0 {
+		if err := m.insertItems(goVer); err != nil {
+			return nil, err
+		}
+	}
+
+	return m, nil
+}
+
+// insertItems inserts the items into the database
+func (m *MapVersions) insertItems(goVer *versions.GoVersion) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	tx, err := m.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func(tx *sql.Tx) {
+		if err = tx.Rollback(); err != nil {
+			fmt.Println(err)
+		}
+	}(tx)
+
+	for i := range goVer.Versions {
+		for _, file := range goVer.Versions[i].Files {
+			if _, err = tx.ExecContext(ctx, insertQuery, goVer.Versions[i].Version, goVer.Versions[i].Stable, file.Filename, file.Os, file.Arch, file.Sha256, file.Size, file.Kind); err != nil {
+				continue
+			}
+		}
+	}
+
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// settingDatabase sets up the database connection
+func (m *MapVersions) settingDatabase() error {
 	opts := dataprovider.NewOptions(
 		dataprovider.WithDriver(dataprovider.SQLiteDataProviderName),
 		dataprovider.WithConnectionString("file:history.sqlite3?cache=shared"),
@@ -85,40 +140,68 @@ func NewMapVersions(goVer *versions.GoVersion) (*MapVersions, error) {
 
 	provider, err := dataprovider.NewDataProvider(opts)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// Create the database table for the Go versions
 	if err = provider.InitializeDatabase(createQuery); err != nil {
-		return nil, err
+		return err
 	}
 
 	// Create the database table for the latest Go version
 	if err = provider.InitializeDatabase(createLatestQuery); err != nil {
-		return nil, err
+		return err
 	}
 
-	db := provider.GetConnection()
+	m.db = provider.GetConnection()
+	return nil
+}
 
-	var hashes = make([]*File, 0)
-	if err = db.Select(&hashes, findAllSha256Query); err != nil {
-		return nil, err
+// compareExistingFiles compares the existing files in the database with the new files
+func (m *MapVersions) compareExistingFiles(goVer *versions.GoVersion) error {
+	var hashes []*File
+	if err := m.db.Select(&hashes, findAllSha256Query); err != nil {
+		return fmt.Errorf("error getting all hashes: %w", err)
 	}
 
-	latestVersion := &LatestVersion{}
-	if err = db.Get(latestVersion, findLatestQuery); err != nil {
-		if !errors.Is(err, sql.ErrNoRows) {
-			return nil, err
+	hashMap := make(map[string]struct{})
+	for _, hash := range hashes {
+		hashMap[hash.Sha256] = struct{}{}
+	}
+
+	fixedVersions := make([]versions.Versions, 0)
+
+	for i := range goVer.Versions {
+		for _, file := range goVer.Versions[i].Files {
+			if _, exists := hashMap[file.Sha256]; !exists {
+				fixedVersions[i].Files = append(fixedVersions[i].Files, file)
+			}
 		}
 	}
 
-	customQuery := updateLatestQuery
+	goVer.Versions = fixedVersions
+	return nil
+}
+
+// checkLatestVersion checks if the latest version is the same as the new version
+func (m *MapVersions) checkLatestVersion(goVer *versions.GoVersion) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	latestVersion := &LatestVersion{}
+	if err := m.db.Get(latestVersion, findLatestQuery); err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+	}
+
 	uVer := &GoVersion{
 		ID:               latestVersion.ID,
 		StableVersion:    goVer.StableVersion,
 		ReleaseCandidate: goVer.ReleaseCandidate,
 	}
 
+	customQuery := updateLatestQuery
 	if goVer.StableVersion != latestVersion.Version {
 		customQuery = updateLatestQuery
 	}
@@ -127,53 +210,14 @@ func NewMapVersions(goVer *versions.GoVersion) (*MapVersions, error) {
 		customQuery = insertLatestQuery
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Hour)
-	defer cancel()
-
-	tx, err := db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, err
-	}
-	defer func(tx *sql.Tx) {
-		if err = tx.Rollback(); err != nil {
-			fmt.Println(err)
-		}
-	}(tx)
-
-	if _, err = tx.ExecContext(ctx, customQuery, uVer.StableVersion, true, uVer.ReleaseCandidate, uVer.ID); err != nil {
-		return nil, err
+	if _, err := m.db.ExecContext(ctx, customQuery, uVer.StableVersion, true, uVer.ReleaseCandidate, uVer.ID); err != nil {
+		return err
 	}
 
-	if len(hashes) == 0 {
-		for i := range goVer.Versions {
-			for _, file := range goVer.Versions[i].Files {
-				if _, err = tx.ExecContext(ctx, insertQuery, goVer.Versions[i].Version, goVer.Versions[i].Stable, file.Filename, file.Os, file.Arch, file.Sha256, file.Size, file.Kind); err != nil {
-					continue
-				}
-			}
-		}
-		goto doneCommit
-	}
-
-	for i := range goVer.Versions {
-		for _, file := range goVer.Versions[i].Files {
-			if compareHashes(hashes, file.Sha256) {
-				continue
-			}
-			if _, err = tx.ExecContext(ctx, insertQuery, goVer.Versions[i].Version, goVer.Versions[i].Stable, file.Filename, file.Os, file.Arch, file.Sha256, file.Size, file.Kind); err != nil {
-				continue
-			}
-		}
-	}
-
-doneCommit:
-
-	if err = tx.Commit(); err != nil {
-		return nil, err
-	}
-	return &MapVersions{db: db}, nil
+	return nil
 }
 
+// GetAll returns all the versions
 func (m *MapVersions) GetAll() ([]*File, error) {
 	var v []*File
 	if err := m.db.Select(&v, findAllQuery); err != nil {
@@ -182,6 +226,7 @@ func (m *MapVersions) GetAll() ([]*File, error) {
 	return v, nil
 }
 
+// GetByID returns a version by its ID
 func (m *MapVersions) GetByID(id int) (*File, error) {
 	var v File
 	if err := m.db.Get(&v, findByIDQuery, id); err != nil {
@@ -190,6 +235,7 @@ func (m *MapVersions) GetByID(id int) (*File, error) {
 	return &v, nil
 }
 
+// GetByVer returns a version by its version
 func (m *MapVersions) GetByVer(version string) (*File, error) {
 	var v File
 	if err := m.db.Get(&v, findByVerQuery, version); err != nil {
@@ -198,6 +244,7 @@ func (m *MapVersions) GetByVer(version string) (*File, error) {
 	return &v, nil
 }
 
+// GetByOS returns a version by its OS
 func (m *MapVersions) GetByOS(os string) ([]*File, error) {
 	var v []*File
 	if err := m.db.Select(&v, findByOSQuery, os); err != nil {
@@ -206,6 +253,7 @@ func (m *MapVersions) GetByOS(os string) ([]*File, error) {
 	return v, nil
 }
 
+// GetByArch returns a version by its architecture
 func (m *MapVersions) GetByArch(arch string) ([]*File, error) {
 	var v []*File
 	if err := m.db.Select(&v, findByArchQuery, arch); err != nil {
@@ -214,6 +262,7 @@ func (m *MapVersions) GetByArch(arch string) ([]*File, error) {
 	return v, nil
 }
 
+// GetByKind returns a version by its kind
 func (m *MapVersions) GetByKind(kind string) ([]*File, error) {
 	var v []*File
 	if err := m.db.Select(&v, findByKindQuery, kind); err != nil {
@@ -222,6 +271,7 @@ func (m *MapVersions) GetByKind(kind string) ([]*File, error) {
 	return v, nil
 }
 
+// GetByStable returns a version by its stability
 func (m *MapVersions) GetByStable() ([]*File, error) {
 	var v []*File
 	if err := m.db.Select(&v, findByStableQuery); err != nil {
@@ -230,6 +280,7 @@ func (m *MapVersions) GetByStable() ([]*File, error) {
 	return v, nil
 }
 
+// GetByOSArch returns a version by its OS and architecture
 func (m *MapVersions) GetByOSArch(os, arch string) ([]*File, error) {
 	var v []*File
 	if err := m.db.Select(&v, findByOSArchQuery, os, arch); err != nil {
@@ -238,6 +289,7 @@ func (m *MapVersions) GetByOSArch(os, arch string) ([]*File, error) {
 	return v, nil
 }
 
+// GetByOSKind returns a version by its OS and kind
 func (m *MapVersions) GetByOSKind(os, kind string) ([]*File, error) {
 	var v []*File
 	if err := m.db.Select(&v, findByOSKindQuery, os, kind); err != nil {
@@ -246,6 +298,7 @@ func (m *MapVersions) GetByOSKind(os, kind string) ([]*File, error) {
 	return v, nil
 }
 
+// GetByArchKind returns a version by its architecture and kind
 func (m *MapVersions) GetByArchKind(arch, kind string) ([]*File, error) {
 	var v []*File
 	if err := m.db.Select(&v, findByArchKindQuery, arch, kind); err != nil {
@@ -254,6 +307,7 @@ func (m *MapVersions) GetByArchKind(arch, kind string) ([]*File, error) {
 	return v, nil
 }
 
+// GetByOSArchKind returns a version by its OS, architecture, and kind
 func (m *MapVersions) GetByOSArchKind(os, arch, kind string) ([]*File, error) {
 	var v []*File
 	if err := m.db.Select(&v, findByOSArchKindQuery, os, arch, kind); err != nil {
@@ -262,6 +316,7 @@ func (m *MapVersions) GetByOSArchKind(os, arch, kind string) ([]*File, error) {
 	return v, nil
 }
 
+// GetByOSArchStable returns a version by its OS, architecture, and stability
 func (m *MapVersions) GetByOSArchStable(os, arch string, stable bool) ([]*File, error) {
 	var v []*File
 	if err := m.db.Select(&v, findByOSArchStableQuery, os, arch, stable); err != nil {
@@ -270,6 +325,7 @@ func (m *MapVersions) GetByOSArchStable(os, arch string, stable bool) ([]*File, 
 	return v, nil
 }
 
+// GetByOSArchKindStable returns a version by its OS, architecture, kind, and stability
 func (m *MapVersions) GetByOSArchKindStable(os, arch, kind string, stable bool) ([]*File, error) {
 	var v []*File
 	if err := m.db.Select(&v, findByOSArchKindStableQuery, os, arch, kind, stable); err != nil {
@@ -278,6 +334,7 @@ func (m *MapVersions) GetByOSArchKindStable(os, arch, kind string, stable bool) 
 	return v, nil
 }
 
+// GetBySha256 returns a version by its SHA256
 func (m *MapVersions) GetBySha256(sha256 string) (*File, error) {
 	var v File
 	if err := m.db.Get(&v, findBySha256Query, sha256); err != nil {
@@ -286,6 +343,7 @@ func (m *MapVersions) GetBySha256(sha256 string) (*File, error) {
 	return &v, nil
 }
 
+// GetLatest returns the latest version
 func (m *MapVersions) GetLatest() (*LatestVersion, error) {
 	var v LatestVersion
 	if err := m.db.Get(&v, findLatestQuery); err != nil {
@@ -294,25 +352,14 @@ func (m *MapVersions) GetLatest() (*LatestVersion, error) {
 	return &v, nil
 }
 
+// Update updates a version
 func (m *MapVersions) Update(v *versions.Versions) error {
 	_, err := m.db.Exec(updateQuery, v.Version, v.Stable, v.Files[0].Filename, v.Files[0].Os, v.Files[0].Arch, v.Files[0].Sha256, v.Files[0].Size, v.Files[0].Kind, v.ID)
 	return err
 }
 
+// Delete deletes a version
 func (m *MapVersions) Delete(id int) error {
 	_, err := m.db.Exec(deleteQuery, id)
 	return err
-}
-
-func compareHashes(hashes []*File, hashFile string) bool {
-	if hashes == nil {
-		return false
-	}
-
-	for _, hash := range hashes {
-		if hash.Sha256 == hashFile {
-			return true
-		}
-	}
-	return false
 }
