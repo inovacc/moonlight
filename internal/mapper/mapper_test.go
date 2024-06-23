@@ -2,11 +2,16 @@ package mapper
 
 import (
 	"github.com/stretchr/testify/assert"
+	"moonlight/internal/database"
 	"moonlight/pkg/versions"
 	"testing"
 )
 
 func TestNewMapVersions(t *testing.T) {
+	if err := database.NewDatabase(); err != nil {
+		t.Error("Expected database to be initialized")
+	}
+
 	goVer, err := versions.NewGoVersion()
 	if err != nil {
 		t.Fatal(err)

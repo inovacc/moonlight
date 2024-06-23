@@ -1,29 +1,39 @@
 package cron
 
 import (
-	"fmt"
+	"context"
 	"github.com/robfig/cron/v3"
-	"time"
 )
 
-func NewCron() {
-	c := cron.New(cron.WithSeconds())
+type Cron struct {
+	cron *cron.Cron
+	ctx  context.Context
+}
 
-	// Agregar una función que se ejecute cada 24 horas
-	// El formato de cron es "segundo minuto hora día mes día-de-la-semana"
-	_, err := c.AddFunc("0 0 0 * * *", func() {
-		fmt.Println("Trabajo cron ejecutado a:", time.Now())
-		// Aquí va tu lógica
-	})
+type EntryID cron.EntryID
 
-	if err != nil {
-		fmt.Println("Error al agregar el trabajo cron:", err)
-		return
-	}
+func NewCron(ctx context.Context) (*Cron, error) {
+	return &Cron{
+		cron: cron.New(cron.WithSeconds()),
+		ctx:  ctx,
+	}, nil
+}
 
-	// Iniciar el cron scheduler
-	c.Start()
+func (c *Cron) Start() {
+	go func() {
+		defer c.cron.Stop()
+		c.cron.Start()
 
-	// Mantener el programa en ejecución
-	select {}
+		for {
+			select {
+			case <-c.ctx.Done():
+				break
+			}
+		}
+	}()
+}
+
+func (c *Cron) AddFunc(spec string, cmd func()) (EntryID, error) {
+	id, err := c.cron.AddFunc(spec, cmd)
+	return EntryID(id), err
 }

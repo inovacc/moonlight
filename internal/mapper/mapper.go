@@ -5,8 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"github.com/inovacc/dataprovider"
 	"github.com/jmoiron/sqlx"
+	"moonlight/internal/database"
 	"moonlight/pkg/versions"
 	"time"
 )
@@ -39,7 +39,6 @@ const (
 
 type LatestVersion struct {
 	ID                  int    `json:"id,omitempty" db:"id"`
-	Version             string `json:"version,omitempty" db:"version"`
 	NexReleaseCandidate string `json:"next_release_candidate,omitempty" db:"next_release_candidate"`
 	StableVersion       string `json:"stable,omitempty" db:"stable"`
 	Sha256              string `json:"sha256,omitempty" db:"sha256"`
@@ -78,9 +77,15 @@ type MapVersions struct {
 }
 
 func NewMapVersions(goVer *versions.GoVersion) (*MapVersions, error) {
-	m := &MapVersions{}
+	m := &MapVersions{
+		db: database.GetConnection(),
+	}
 
-	if err := m.settingDatabase(); err != nil {
+	if _, err := m.db.Exec(createQuery); err != nil {
+		return nil, err
+	}
+
+	if _, err := m.db.Exec(createLatestQuery); err != nil {
 		return nil, err
 	}
 
@@ -131,35 +136,9 @@ func (m *MapVersions) insertItems(goVer *versions.GoVersion) error {
 	return nil
 }
 
-// settingDatabase sets up the database connection
-func (m *MapVersions) settingDatabase() error {
-	opts := dataprovider.NewOptions(
-		dataprovider.WithDriver(dataprovider.SQLiteDataProviderName),
-		dataprovider.WithConnectionString("file:history.sqlite3?cache=shared"),
-	)
-
-	provider, err := dataprovider.NewDataProvider(opts)
-	if err != nil {
-		return err
-	}
-
-	// Create the database table for the Go versions
-	if err = provider.InitializeDatabase(createQuery); err != nil {
-		return err
-	}
-
-	// Create the database table for the latest Go version
-	if err = provider.InitializeDatabase(createLatestQuery); err != nil {
-		return err
-	}
-
-	m.db = provider.GetConnection()
-	return nil
-}
-
 // compareExistingFiles compares the existing files in the database with the new files
 func (m *MapVersions) compareExistingFiles(goVer *versions.GoVersion) error {
-	var hashes []*File
+	var hashes = make([]*File, 0)
 	if err := m.db.Select(&hashes, findAllSha256Query); err != nil {
 		return fmt.Errorf("error getting all hashes: %w", err)
 	}
@@ -169,12 +148,15 @@ func (m *MapVersions) compareExistingFiles(goVer *versions.GoVersion) error {
 		hashMap[hash.Sha256] = struct{}{}
 	}
 
-	fixedVersions := make([]versions.Versions, 0)
+	fixedVersions := make([]versions.Versions, len(goVer.Versions))
 
-	for i := range goVer.Versions {
-		for _, file := range goVer.Versions[i].Files {
+	for idx, item := range goVer.Versions {
+		for _, file := range item.Files {
+
+			fixedVersions[idx].Version = item.Version
+			fixedVersions[idx].Stable = item.Stable
 			if _, exists := hashMap[file.Sha256]; !exists {
-				fixedVersions[i].Files = append(fixedVersions[i].Files, file)
+				fixedVersions[idx].Files = append(fixedVersions[idx].Files, file)
 			}
 		}
 	}
@@ -202,11 +184,11 @@ func (m *MapVersions) checkLatestVersion(goVer *versions.GoVersion) error {
 	}
 
 	customQuery := updateLatestQuery
-	if goVer.StableVersion != latestVersion.Version {
+	if goVer.StableVersion != latestVersion.StableVersion {
 		customQuery = updateLatestQuery
 	}
 
-	if latestVersion.Version == "" {
+	if latestVersion.StableVersion == "" {
 		customQuery = insertLatestQuery
 	}
 

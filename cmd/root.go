@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"log/slog"
+	"moonlight/internal/component"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -11,9 +12,7 @@ import (
 var rootCmd = &cobra.Command{
 	Use:   "moonlight",
 	Short: "A brief description of your application",
-	// Uncomment the following line if your bare application
-	// has an action associated with it:
-	// Run: func(cmd *cobra.Command, args []string) { },
+	RunE:  component.MainComponent,
 }
 
 func Execute() {

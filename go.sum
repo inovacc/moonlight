@@ -32,6 +32,10 @@ github.com/inconshreveable/mousetrap v1.1.0 h1:wN+x4NVGpMsO7ErUn/mUI3vEoE6Jt13X2
 github.com/inconshreveable/mousetrap v1.1.0/go.mod h1:vpF70FUmC8bwa3OWnCshd2FqLfsEA9PFc4w1p2J65bw=
 github.com/inovacc/dataprovider v0.1.2 h1:W/Ba1Oc5NGrdCoHF2EBJ05k1rONWD1t85gXIKMI/mnQ=
 github.com/inovacc/dataprovider v0.1.2/go.mod h1:LBMWaJfMR+J3KCEWDnjFMMAwR3AEnt55YE0762Oyo0o=
+github.com/inovacc/dataprovider v0.1.3 h1:nB4WOiGlpjxy92baTREDOFvl6R/HWTFy6FfWM5kmRj8=
+github.com/inovacc/dataprovider v0.1.3/go.mod h1:LBMWaJfMR+J3KCEWDnjFMMAwR3AEnt55YE0762Oyo0o=
+github.com/inovacc/dataprovider v0.1.4 h1:MP9kDuemQgUo840GbCkR+ufbGiHhzc3UxDrhpR3Zgzc=
+github.com/inovacc/dataprovider v0.1.4/go.mod h1:LBMWaJfMR+J3KCEWDnjFMMAwR3AEnt55YE0762Oyo0o=
 github.com/jmoiron/sqlx v1.4.0 h1:1PLqN7S1UYp5t4SrVVnt4nUVNemrDAtxlulVe+Qgm3o=
 github.com/jmoiron/sqlx v1.4.0/go.mod h1:ZrZ7UsYB/weZdl2Bxg6jCRO9c3YHl8r3ahlKmRT4JLY=
 github.com/kr/pretty v0.3.1 h1:flRD4NNwYAUpkphVc1HcthR4KEIFJ65n8Mw5qdRn3LE=

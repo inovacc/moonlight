@@ -4,7 +4,7 @@ go 1.22
 
 require (
 	github.com/blang/semver v3.5.1+incompatible
-	github.com/inovacc/dataprovider v0.1.2
+	github.com/inovacc/dataprovider v0.1.4
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/stretchr/testify v1.9.0
 )
