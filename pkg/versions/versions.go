@@ -14,37 +14,6 @@ const (
 	goUrl = "https://go.dev/dl/?mode=json&include=all"
 )
 
-type kindString string
-
-const (
-	kindSource    kindString = "source"
-	kindBinary    kindString = "binary"
-	kindInstaller kindString = "installer"
-	kindArchive   kindString = "archive"
-)
-
-type archString string
-
-const (
-	archAmd64    archString = "amd64"
-	arch386      archString = "386"
-	archArm64    archString = "arm64"
-	archArm      archString = "arm"
-	archPpc64    archString = "ppc64"
-	archMips64   archString = "mips64"
-	archMips64le archString = "mips64le"
-	archS390x    archString = "s390x"
-	archWasm     archString = "wasm"
-)
-
-type osString string
-
-const (
-	osLinux   osString = "linux"
-	osDarwin  osString = "darwin"
-	osWindows osString = "windows"
-)
-
 type Versions struct {
 	ID      int    `json:"id,omitempty"`
 	Version string `json:"version,omitempty"`
@@ -81,7 +50,7 @@ func NewGoVersion() (*GoVersion, error) {
 
 	for i := range goVer.Versions {
 		for j := range goVer.Versions[i].Files {
-			if goVer.Versions[i].Files[j].Kind == string(kindSource) {
+			if goVer.Versions[i].Files[j].Kind == "source" {
 				goVer.Versions[i].Files[j].Os = "any"
 				goVer.Versions[i].Files[j].Arch = "any"
 			}

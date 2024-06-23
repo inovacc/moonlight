@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func Cron() {
+func NewCron() {
 	c := cron.New(cron.WithSeconds())
 
 	// Agregar una función que se ejecute cada 24 horas
