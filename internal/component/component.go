@@ -5,6 +5,7 @@ import (
 	"github.com/inovacc/moonlight/internal/database"
 	"github.com/inovacc/moonlight/internal/mapper"
 	"github.com/inovacc/moonlight/pkg/versions"
+	"github.com/spf13/cobra"
 	"log/slog"
 )
 
