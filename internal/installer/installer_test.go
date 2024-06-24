@@ -3,6 +3,8 @@ package installer
 import (
 	"context"
 	"github.com/inovacc/moonlight/internal/database"
+	"log"
+	"strings"
 	"testing"
 )
 
@@ -121,7 +123,11 @@ func TestNewInstaller(t *testing.T) {
 
 	var errList []string
 
+	current := 0
 	for _, item := range list {
+		current++
+		v := strings.Split(item, " ")
+		log.Printf("task %d/%d, installing: %s", current, len(list), v[len(v)-1])
 		if err = installer.Command(item); err != nil {
 			errList = append(errList, err.Error())
 		}

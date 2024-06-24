@@ -15,60 +15,40 @@ import (
 	"time"
 )
 
-const commandPrefixGo = "go"
-const commandPrefixInstall = "install"
-
 const (
-	createTable = `CREATE TABLE IF NOT EXISTS installer (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    version TEXT NOT NULL,
-    command TEXT NOT NULL,
-    dependencies TEXT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-)`
+	commandPrefixGo      = "go"
+	commandPrefixInstall = "install"
+
+	createTableInstaller = `CREATE TABLE IF NOT EXISTS installer (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		version TEXT NOT NULL,
+		command TEXT NOT NULL,
+		dependencies TEXT NOT NULL,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	)`
 
 	createTableModule = `CREATE TABLE IF NOT EXISTS module (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    path TEXT NOT NULL,
-    version TEXT NOT NULL,
-    query TEXT NOT NULL,
-    versions_history TEXT NOT NULL,
-    time TIMESTAMP NOT NULL,
-    dir TEXT NOT NULL,
-    go_mod TEXT NOT NULL,
-    go_version TEXT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    installer_id INTEGER,
-    FOREIGN KEY (installer_id) REFERENCES installer(id)
-)`
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		path TEXT NOT NULL,
+		version TEXT NOT NULL,
+		query TEXT NOT NULL,
+		versions_history TEXT NOT NULL,
+		time TIMESTAMP NOT NULL,
+		dir TEXT NOT NULL,
+		go_mod TEXT NOT NULL,
+		go_version TEXT NOT NULL,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		installer_id INTEGER,
+		FOREIGN KEY (installer_id) REFERENCES installer(id)
+	)`
 
-	insertQuery  = `INSERT INTO installer (version, command, dependencies) VALUES (?, ?, ?) RETURNING id`
-	insertModule = `INSERT INTO module (path, version, query, versions_history, time, dir, go_mod, go_version, installer_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-	selectAll    = `SELECT * FROM installer`
-	selectOne    = `SELECT * FROM installer WHERE version = ?`
+	insertInstaller = `INSERT INTO installer (version, command, dependencies) VALUES (?, ?, ?) RETURNING id`
+	insertModule    = `INSERT INTO module (path, version, query, versions_history, time, dir, go_mod, go_version, installer_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
 )
 
 var cronId int
-
-type File struct {
-	ID       int    `json:"id,omitempty" db:"id"`
-	Version  string `json:"version,omitempty" db:"version"`
-	Stable   bool   `json:"stable,omitempty" db:"stable"`
-	Filename string `json:"filename,omitempty" db:"filename"`
-	Os       string `json:"os,omitempty" db:"os"`
-	Arch     string `json:"arch,omitempty" db:"arch"`
-	Sha256   string `json:"sha256,omitempty" db:"sha256"`
-	Size     int    `json:"size,omitempty" db:"size"`
-	URL      string `json:"url,omitempty" db:"url"`
-}
-
-type Install struct {
-	ID      int    `json:"id,omitempty" db:"id"`
-	Version string `json:"version,omitempty" db:"version"`
-	Command string `json:"command,omitempty" db:"command"`
-}
 
 type Module struct {
 	Path      string    `json:"path,omitempty"`
@@ -92,7 +72,7 @@ func NewInstaller(ctx context.Context, db *sqlx.DB) (*Installer, error) {
 		ctx: ctx,
 	}
 
-	if _, err := i.db.ExecContext(ctx, createTable); err != nil {
+	if _, err := i.db.ExecContext(ctx, createTableInstaller); err != nil {
 		return nil, err
 	}
 
@@ -118,30 +98,20 @@ func (i *Installer) Command(command string) error {
 	ctxTimeout, cancel := context.WithTimeout(i.ctx, 5*time.Minute)
 	defer cancel()
 
-	parsedCommand := strings.Split(command, " ")
-
-	if !strings.HasPrefix(parsedCommand[0], commandPrefixGo) {
-		return fmt.Errorf("invalid command, must have prefix %s", commandPrefixGo)
-	}
-
-	if !strings.HasPrefix(parsedCommand[1], commandPrefixInstall) {
-		return fmt.Errorf("invalid command, must have prefix %s", commandPrefixInstall)
-	}
-
-	afs := afero.NewOsFs()
-	tmpDir, err := afero.TempDir(afs, "", "go-list")
+	parsedCommand, err := i.validateCommand(command)
 	if err != nil {
 		return err
 	}
-	defer func(afs afero.Fs, path string) {
-		if err = afs.RemoveAll(path); err != nil {
-			fmt.Println(err)
-		}
-	}(afs, tmpDir)
 
-	urlList := strings.Split(parsedCommand[2], "@")
+	tmpDir, err := afero.TempDir(afero.NewOsFs(), "", "go-list")
+	if err != nil {
+		return err
+	}
+	defer afero.NewOsFs().RemoveAll(tmpDir)
+
+	urlList := strings.Split(parsedCommand[len(parsedCommand)-1], "@")
 	if len(urlList) != 2 {
-		return fmt.Errorf("invalid url")
+		return fmt.Errorf("invalid url format")
 	}
 
 	parsedCommand[2], err = getBaseURL(urlList[0])
@@ -149,68 +119,101 @@ func (i *Installer) Command(command string) error {
 		return err
 	}
 
-	execCommand := strings.Split(fmt.Sprintf("go list -m -json -versions %s", parsedCommand[2]), " ")
-	cmd := exec.CommandContext(ctxTimeout, execCommand[0], execCommand[1:]...)
-	cmd.Dir = tmpDir
+	module, err := i.getModuleInfo(ctxTimeout, parsedCommand[2], tmpDir)
+	if err != nil {
+		return err
+	}
+
+	module.Version = selectVersion(module)
+
+	if err = i.executeInstallCommand(ctxTimeout, parsedCommand[0], urlList[0], module.Version); err != nil {
+		return err
+	}
+
+	return i.saveModuleInfo(ctxTimeout, command, module)
+}
+
+func (i *Installer) validateCommand(command string) ([]string, error) {
+	parsedCommand := strings.Split(command, " ")
+	if !strings.HasPrefix(parsedCommand[0], commandPrefixGo) {
+		return nil, fmt.Errorf("invalid command, must have prefix %s", commandPrefixGo)
+	}
+
+	if !strings.HasPrefix(parsedCommand[1], commandPrefixInstall) {
+		return nil, fmt.Errorf("invalid command, must have prefix %s", commandPrefixInstall)
+	}
+	return parsedCommand, nil
+}
+
+func (i *Installer) getModuleInfo(ctx context.Context, url, dir string) (Module, error) {
+	execCommand := []string{"go", "list", "-m", "-json", "-versions", url}
+	cmd := exec.CommandContext(ctx, execCommand[0], execCommand[1:]...)
+	cmd.Dir = dir
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return err
+		return Module{}, err
 	}
 
 	var module Module
 	if err = json.Unmarshal(out, &module); err != nil {
-		return err
+		return Module{}, err
 	}
 
+	return module, nil
+}
+
+func selectVersion(module Module) string {
 	if module.Version == "" {
 		stableVersions := filterAndSortStableVersions(module.Versions)
 		if len(stableVersions) > 0 {
-			module.Version = stableVersions[0]
+			return stableVersions[0]
 		}
 	}
+	return module.Version
+}
 
-	execCommand = strings.Split(fmt.Sprintf("go install %s@%s", urlList[0], module.Version), " ")
-
-	if module.Version == "" {
-		execCommand = strings.Split(command, " ")
+func (i *Installer) executeInstallCommand(ctx context.Context, goCommand, url, version string) error {
+	execCommand := []string{goCommand, "install", fmt.Sprintf("%s@%s", url, version)}
+	cmd := exec.CommandContext(ctx, execCommand[0], execCommand[1:]...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("error executing install command: %w, output: %s", err, string(out))
 	}
-	cmd = exec.CommandContext(ctxTimeout, execCommand[0], execCommand[1:]...)
+	return nil
+}
 
-	out, err = cmd.CombinedOutput()
+func (i *Installer) saveModuleInfo(ctx context.Context, command string, module Module) error {
+	tx, err := i.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return err
 	}
 
-	dependencies := strings.ReplaceAll(string(out), "go: downloading ", "")
-	dependencies = strings.ReplaceAll(dependencies, "go: extracting ", "")
-	dependencies = strings.ReplaceAll(dependencies, "go: finding ", "")
-	dependencies = strings.ReplaceAll(dependencies, "go: found ", "")
-
+	dependencies := extractDependencies(module.Versions)
 	moduleStr := strings.Join(module.Versions, ",")
 
-	tx, err := i.db.BeginTxx(ctxTimeout, nil)
-	if err != nil {
-		return err
-	}
-
 	var installerID int64
-	if err = tx.QueryRowContext(ctxTimeout, insertQuery, module.Version, command, dependencies).Scan(&installerID); err != nil {
+	if err := tx.QueryRowContext(ctx, insertInstaller, module.Version, command, dependencies).Scan(&installerID); err != nil {
 		tx.Rollback()
 		return err
 	}
 
-	_, err = tx.ExecContext(ctxTimeout, insertModule, module.Path, module.Version, module.Query, moduleStr, module.Time, module.Dir, module.GoMod, module.GoVersion, installerID)
+	_, err = tx.ExecContext(ctx, insertModule, module.Path, module.Version, module.Query, moduleStr, module.Time, module.Dir, module.GoMod, module.GoVersion, installerID)
 	if err != nil {
 		tx.Rollback()
 		return err
 	}
 
-	if err = tx.Commit(); err != nil {
-		return err
-	}
+	return tx.Commit()
+}
 
-	return nil
+func extractDependencies(output []string) string {
+	joinedOutput := strings.Join(output, " ")
+	joinedOutput = strings.ReplaceAll(joinedOutput, "go: downloading ", "")
+	joinedOutput = strings.ReplaceAll(joinedOutput, "go: extracting ", "")
+	joinedOutput = strings.ReplaceAll(joinedOutput, "go: finding ", "")
+	joinedOutput = strings.ReplaceAll(joinedOutput, "go: found ", "")
+	return joinedOutput
 }
 
 func getBaseURL(rawURL string) (string, error) {
@@ -219,29 +222,17 @@ func getBaseURL(rawURL string) (string, error) {
 		return "", err
 	}
 
-	// Split the path into segments
 	segments := strings.Split(parsedURL.Path, "/")
-
-	// Find the index of "cmd"
-	cmdIndex := -1
 	for i, segment := range segments {
 		if segment == "cmd" {
-			cmdIndex = i
+			parsedURL.Path = strings.Join(segments[:i], "/")
 			break
 		}
 	}
-
-	// If "cmd" is found, create the base path without "cmd" and the following segment
-	if cmdIndex != -1 && cmdIndex+1 < len(segments) {
-		basePath := strings.Join(segments[:cmdIndex], "/")
-		parsedURL.Path = basePath
-	}
-
 	return parsedURL.String(), nil
 }
 
 func filterAndSortStableVersions(versions []string) []string {
-	// Filter out pre-release versions
 	var stableVersions []*semver.Version
 	for _, v := range versions {
 		ver, err := semver.NewVersion(strings.TrimPrefix(v, "v"))
@@ -253,13 +244,11 @@ func filterAndSortStableVersions(versions []string) []string {
 		}
 	}
 
-	// Sort the stable versions
 	sort.Slice(stableVersions, func(i, j int) bool {
 		return stableVersions[i].GreaterThan(stableVersions[j])
 	})
 
-	// Convert back to string slice
-	var result = make([]string, 0)
+	var result []string
 	for _, v := range stableVersions {
 		result = append(result, fmt.Sprintf("v%s", v.String()))
 	}
