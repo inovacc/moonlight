@@ -5,14 +5,19 @@ import (
 	"github.com/inovacc/moonlight/internal/component"
 	"log/slog"
 	"os"
-
-	"github.com/spf13/cobra"
 )
 
 var rootCmd = &cobra.Command{
 	Use:   "moonlight",
 	Short: "A brief description of your application",
-	RunE:  component.MainComponent,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		configFile, err := cmd.Flags().GetString("config")
+		if err != nil {
+			return err
+		}
+
+		return component.Run(configFile)
+	},
 }
 
 func Execute() {
