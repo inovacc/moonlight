@@ -2,8 +2,9 @@ package database
 
 import (
 	"github.com/inovacc/dataprovider"
+	"github.com/inovacc/moonlight/internal/config"
 	"github.com/jmoiron/sqlx"
-	"moonlight/internal/config"
+	"log/slog"
 )
 
 var d *Database
@@ -34,6 +35,8 @@ func GetConnection() *sqlx.DB {
 }
 
 // CloseConnection closes the database connection
-func CloseConnection() error {
-	return d.db.Close()
+func CloseConnection() {
+	if err := d.db.Close(); err != nil {
+		slog.Error(err.Error())
+	}
 }

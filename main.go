@@ -1,6 +1,6 @@
 package main
 
-import "moonlight/cmd"
+import "github.com/inovacc/moonlight/cmd"
 
 func main() {
 	cmd.Execute()

@@ -1,12 +1,12 @@
 package component
 
 import (
+	"github.com/inovacc/moonlight/internal/cron"
+	"github.com/inovacc/moonlight/internal/database"
+	"github.com/inovacc/moonlight/internal/mapper"
+	"github.com/inovacc/moonlight/pkg/versions"
 	"github.com/spf13/cobra"
 	"log/slog"
-	"moonlight/internal/cron"
-	"moonlight/internal/database"
-	"moonlight/internal/mapper"
-	"moonlight/pkg/versions"
 )
 
 func MainComponent(cmd *cobra.Command, _ []string) error {
@@ -15,7 +15,7 @@ func MainComponent(cmd *cobra.Command, _ []string) error {
 	}
 	defer database.CloseConnection()
 
-	c, err := cron.NewCron(cmd.Context())
+	c, err := cron.NewCronScheduler(cmd.Context())
 	if err != nil {
 		return err
 	}
@@ -41,13 +41,13 @@ func MainComponent(cmd *cobra.Command, _ []string) error {
 		slog.Info(latestVersion.StableVersion)
 	}
 
-	if _, err = c.AddFunc("0 0 0 * * *", job); err != nil {
+	if _, err = c.AddFunc("*/1 * * * *", job); err != nil {
 		return err
 	}
 
 	c.Start()
 
-	slog.Info("Cron started")
+	slog.Info("Main component started")
 
 	for {
 		select {

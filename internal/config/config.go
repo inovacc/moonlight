@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"github.com/spf13/viper"
 	"os"
 	"strings"
 )
@@ -88,5 +89,26 @@ func WithLogFormat(logFormat LogFormat) OptsFunc {
 func NewConfig(opts ...OptsFunc) {
 	for _, fn := range opts {
 		fn(GetConfig)
+	}
+}
+
+func SetConfig(cfgFile string) {
+	if cfgFile != "" {
+		cfgFile = os.Getenv("CONFIG_FILE")
+	}
+
+	if cfgFile == "" {
+		panic("no config file or ´CONFIG_FILE´ env var found")
+	}
+
+	viper.SetConfigFile(cfgFile)
+	viper.AutomaticEnv()
+
+	if err := viper.ReadInConfig(); err != nil {
+		panic(fmt.Errorf("fatal error config file: %s", err))
+	}
+
+	if err := viper.Unmarshal(GetConfig); err != nil {
+		panic(fmt.Errorf("fatal error config file: %s", err))
 	}
 }

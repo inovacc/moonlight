@@ -2,8 +2,8 @@ package cmd
 
 import (
 	"context"
+	"github.com/inovacc/moonlight/internal/component"
 	"log/slog"
-	"moonlight/internal/component"
 	"os"
 
 	"github.com/spf13/cobra"

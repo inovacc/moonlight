@@ -5,11 +5,13 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/inovacc/moonlight/internal/cron"
+	"github.com/inovacc/moonlight/pkg/versions"
 	"github.com/jmoiron/sqlx"
-	"moonlight/internal/database"
-	"moonlight/pkg/versions"
 	"time"
 )
+
+var cronId int
 
 const (
 	createQuery                 = `CREATE TABLE IF NOT EXISTS go_versions (id INTEGER PRIMARY KEY AUTOINCREMENT, version TEXT NOT NULL, stable BOOLEAN NOT NULL, filename TEXT NOT NULL, os TEXT NOT NULL, arch TEXT NOT NULL, sha256 TEXT NOT NULL, size TEXT NOT NULL, kind LONG NOT NULL);`
@@ -73,19 +75,21 @@ type File struct {
 }
 
 type MapVersions struct {
-	db *sqlx.DB
+	db  *sqlx.DB
+	ctx context.Context
 }
 
-func NewMapVersions(goVer *versions.GoVersion) (*MapVersions, error) {
+func NewMapVersions(ctx context.Context, db *sqlx.DB, goVer *versions.GoVersion) (*MapVersions, error) {
 	m := &MapVersions{
-		db: database.GetConnection(),
+		db:  db,
+		ctx: ctx,
 	}
 
-	if _, err := m.db.Exec(createQuery); err != nil {
+	if _, err := m.db.ExecContext(ctx, createQuery); err != nil {
 		return nil, err
 	}
 
-	if _, err := m.db.Exec(createLatestQuery); err != nil {
+	if _, err := m.db.ExecContext(ctx, createLatestQuery); err != nil {
 		return nil, err
 	}
 
@@ -106,9 +110,20 @@ func NewMapVersions(goVer *versions.GoVersion) (*MapVersions, error) {
 	return m, nil
 }
 
+func (m *MapVersions) CronJob(spec string, cron *cron.Cron) error {
+	var err error
+	cronId, err = cron.AddFunc(spec, func() {
+		// Do something
+	})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // insertItems inserts the items into the database
 func (m *MapVersions) insertItems(goVer *versions.GoVersion) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(m.ctx, 5*time.Second)
 	defer cancel()
 
 	tx, err := m.db.BeginTx(ctx, nil)
@@ -167,7 +182,7 @@ func (m *MapVersions) compareExistingFiles(goVer *versions.GoVersion) error {
 
 // checkLatestVersion checks if the latest version is the same as the new version
 func (m *MapVersions) checkLatestVersion(goVer *versions.GoVersion) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(m.ctx, 5*time.Second)
 	defer cancel()
 
 	latestVersion := &LatestVersion{}
