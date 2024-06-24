@@ -7,8 +7,8 @@ package vcs
 import (
 	"errors"
 	"fmt"
+	"github.com/inovacc/moonlight/internal/module/internal/web"
 	"internal/testenv"
-	"moduleList/internal/web"
 	"os"
 	"path/filepath"
 	"strings"

@@ -3,7 +3,9 @@ package cfg
 import (
 	"bytes"
 	"fmt"
+	"github.com/inovacc/moonlight/internal/module/internal/par"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sync"
@@ -145,4 +147,15 @@ func readEnvFile(file string, source string) {
 		}
 		envCache.m[string(key)] = string(val)
 	}
+}
+
+var lookPathCache par.ErrCache[string, string]
+
+// LookPath wraps exec.LookPath and caches the result
+// which can be called by multiple Goroutines at the same time.
+func LookPath(file string) (path string, err error) {
+	return lookPathCache.Do(file,
+		func() (string, error) {
+			return exec.LookPath(file)
+		})
 }

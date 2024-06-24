@@ -1,0 +1,13 @@
+# https://taskfile.dev
+
+version: '3'
+
+tasks:
+  graph:
+    cmds:
+      - go mod tidy -v
+      - go mod graph > graph.txt
+
+  build-dev:
+    cmds:
+      - go build -gcflags "all=-N -l" -o app.exe main.go
