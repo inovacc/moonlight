@@ -10,4 +10,4 @@ tasks:
 
   build-dev:
     cmds:
-      - go build -gcflags "all=-N -l" -o app.exe main.go
+      - go build -gcflags "all=-N -l" .
