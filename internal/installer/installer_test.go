@@ -6,8 +6,8 @@ import (
 	"context"
 	"github.com/inovacc/moonlight/internal/config"
 	"github.com/inovacc/moonlight/internal/database"
+	"github.com/inovacc/moonlight/internal/util"
 	"log"
-	"sort"
 	"strings"
 	"testing"
 )
@@ -42,7 +42,7 @@ func TestNewInstaller(t *testing.T) {
 		"go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.28",
 		"go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.2",
 		"go install github.com/oklog/ulid/v2/cmd/ulid@latest",
-		"go install github.com/cosmtrek/air@latest",
+		"go install github.com/cosmtrek/air/@latest",
 		"go install github.com/dgraph-io/badger/v4/badger@latest",
 		"go install github.com/vugu/vgrun",
 		"go install github.com/swaggo/swag/cmd/swag@latest",
@@ -128,15 +128,14 @@ func TestNewInstaller(t *testing.T) {
 		"go install go.etcd.io/bbolt/cmd/bbolt@v1.3.9",
 	}
 
-	sort.Strings(list)
-
 	var errList []string
+	output := util.RemoveDuplicates(list)
 
 	current := 0
-	for _, item := range list {
+	for _, item := range output {
 		current++
 		v := strings.Split(item, " ")
-		log.Printf("task %d/%d, installing: %s", current, len(list), v[len(v)-1])
+		log.Printf("task %d/%d, installing: %s", current, len(output), v[len(v)-1])
 		if err = installer.Command(item); err != nil {
 			errList = append(errList, err.Error())
 		}
