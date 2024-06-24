@@ -1,0 +1,50 @@
+name: CI Build + Unit Test
+
+on:
+  push:
+    branches-ignore:
+      - main
+  pull_request:
+    branches-ignore:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      - name: Install go/vulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Go vulncheck
+        run: govulncheck ./...
+
+      - name: Test
+        run: go test -v -race -p=1 ./...
+
+      - name: Run vet tool
+        run: go vet ./...
+
+      # - name: Install MinGW-w64
+        # run: sudo apt-get install -y mingw-w64
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: build --snapshot --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Save build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-artifacts
+          path: dist
