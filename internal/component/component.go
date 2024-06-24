@@ -10,6 +10,13 @@ import (
 )
 
 func Run(cmd *cobra.Command, _ []string) error {
+	//configFile, err := cmd.Flags().GetString("config")
+	//if err != nil {
+	//	return err
+	//}
+
+	//config.SetConfig(configFile)
+
 	if err := database.NewDatabase(); err != nil {
 		return err
 	}
