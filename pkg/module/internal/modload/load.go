@@ -107,7 +107,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -682,408 +681,408 @@ func (pkg *loadPkg) fromExternalModule() bool {
 //	return changed, nil
 //}
 
-// resolveMissingImports returns a set of modules that could be added as
-// dependencies in order to resolve missing packages from pkgs.
+//// resolveMissingImports returns a set of modules that could be added as
+//// dependencies in order to resolve missing packages from pkgs.
+////
+//// The newly-resolved packages are added to the addedModuleFor map, and
+//// resolveMissingImports returns a map from each new module version to
+//// the first missing package that module would resolve.
+//func (ld *loader) resolveMissingImports(ctx context.Context) (modAddedBy map[module.Version]*loadPkg, err error) {
+//	type pkgMod struct {
+//		pkg *loadPkg
+//		mod *module.Version
+//	}
+//	var pkgMods []pkgMod
+//	for _, pkg := range ld.pkgs {
+//		if pkg.err == nil {
+//			continue
+//		}
+//		if pkg.isTest() {
+//			// If we are missing a test, we are also missing its non-test version, and
+//			// we should only add the missing import once.
+//			continue
+//		}
+//		if !errors.As(pkg.err, new(*ImportMissingError)) {
+//			// Leave other errors for Import or load.Packages to report.
+//			continue
+//		}
 //
-// The newly-resolved packages are added to the addedModuleFor map, and
-// resolveMissingImports returns a map from each new module version to
-// the first missing package that module would resolve.
-func (ld *loader) resolveMissingImports(ctx context.Context) (modAddedBy map[module.Version]*loadPkg, err error) {
-	type pkgMod struct {
-		pkg *loadPkg
-		mod *module.Version
-	}
-	var pkgMods []pkgMod
-	for _, pkg := range ld.pkgs {
-		if pkg.err == nil {
-			continue
-		}
-		if pkg.isTest() {
-			// If we are missing a test, we are also missing its non-test version, and
-			// we should only add the missing import once.
-			continue
-		}
-		if !errors.As(pkg.err, new(*ImportMissingError)) {
-			// Leave other errors for Import or load.Packages to report.
-			continue
-		}
-
-		pkg := pkg
-		var mod module.Version
-		ld.work.Add(func() {
-			var err error
-			mod, err = queryImport(ctx, pkg.path, ld.requirements)
-			if err != nil {
-				var ime *ImportMissingError
-				if errors.As(err, &ime) {
-					for curstack := pkg.stack; curstack != nil; curstack = curstack.stack {
-						if MainModules.Contains(curstack.mod.Path) {
-							ime.ImportingMainModule = curstack.mod
-							break
-						}
-					}
-				}
-				// pkg.err was already non-nil, so we can reasonably attribute the error
-				// for pkg to either the original error or the one returned by
-				// queryImport. The existing error indicates only that we couldn't find
-				// the package, whereas the query error also explains why we didn't fix
-				// the problem — so we prefer the latter.
-				pkg.err = err
-			}
-
-			// err is nil, but we intentionally leave pkg.err non-nil and pkg.mod
-			// unset: we still haven't satisfied other invariants of a
-			// successfully-loaded package, such as scanning and loading the imports
-			// of that package. If we succeed in resolving the new dependency graph,
-			// the caller can reload pkg and update the error at that point.
-			//
-			// Even then, the package might not be loaded from the version we've
-			// identified here. The module may be upgraded by some other dependency,
-			// or by a transitive dependency of mod itself, or — less likely — the
-			// package may be rejected by an AllowPackage hook or rendered ambiguous
-			// by some other newly-added or newly-upgraded dependency.
-		})
-
-		pkgMods = append(pkgMods, pkgMod{pkg: pkg, mod: &mod})
-	}
-	<-ld.work.Idle()
-
-	modAddedBy = map[module.Version]*loadPkg{}
-
-	var (
-		maxTooNew    *gover2.TooNewError
-		maxTooNewPkg *loadPkg
-	)
-	for _, pm := range pkgMods {
-		if tooNew := (*gover2.TooNewError)(nil); errors.As(pm.pkg.err, &tooNew) {
-			if maxTooNew == nil || gover2.Compare(tooNew.GoVersion, maxTooNew.GoVersion) > 0 {
-				maxTooNew = tooNew
-				maxTooNewPkg = pm.pkg
-			}
-		}
-	}
-	if maxTooNew != nil {
-		fmt.Fprintf(os.Stderr, "go: toolchain upgrade needed to resolve %s\n", maxTooNewPkg.path)
-		return nil, maxTooNew
-	}
-
-	for _, pm := range pkgMods {
-		pkg, mod := pm.pkg, *pm.mod
-		if mod.Path == "" {
-			continue
-		}
-
-		fmt.Fprintf(os.Stderr, "go: found %s in %s %s\n", pkg.path, mod.Path, mod.Version)
-		if modAddedBy[mod] == nil {
-			modAddedBy[mod] = pkg
-		}
-	}
-
-	return modAddedBy, nil
-}
-
-// pkg locates the *loadPkg for path, creating and queuing it for loading if
-// needed, and updates its state to reflect the given flags.
+//		pkg := pkg
+//		var mod module.Version
+//		ld.work.Add(func() {
+//			var err error
+//			mod, err = queryImport(ctx, pkg.path, ld.requirements)
+//			if err != nil {
+//				var ime *ImportMissingError
+//				if errors.As(err, &ime) {
+//					for curstack := pkg.stack; curstack != nil; curstack = curstack.stack {
+//						if MainModules.Contains(curstack.mod.Path) {
+//							ime.ImportingMainModule = curstack.mod
+//							break
+//						}
+//					}
+//				}
+//				// pkg.err was already non-nil, so we can reasonably attribute the error
+//				// for pkg to either the original error or the one returned by
+//				// queryImport. The existing error indicates only that we couldn't find
+//				// the package, whereas the query error also explains why we didn't fix
+//				// the problem — so we prefer the latter.
+//				pkg.err = err
+//			}
 //
-// The imports of the returned *loadPkg will be loaded asynchronously in the
-// ld.work queue, and its test (if requested) will also be populated once
-// imports have been resolved. When ld.work goes idle, all transitive imports of
-// the requested package (and its test, if requested) will have been loaded.
-func (ld *loader) pkg(ctx context.Context, path string, flags loadPkgFlags) *loadPkg {
-	if flags.has(pkgImportsLoaded) {
-		panic("internal error: (*loader).pkg called with pkgImportsLoaded flag set")
-	}
-
-	pkg := ld.pkgCache.Do(path, func() *loadPkg {
-		pkg := &loadPkg{
-			path: path,
-		}
-		ld.applyPkgFlags(ctx, pkg, flags)
-
-		ld.work.Add(func() { ld.load(ctx, pkg) })
-		return pkg
-	})
-
-	ld.applyPkgFlags(ctx, pkg, flags)
-	return pkg
-}
-
-// applyPkgFlags updates pkg.flags to set the given flags and propagate the
-// (transitive) effects of those flags, possibly loading or enqueueing further
-// packages as a result.
-func (ld *loader) applyPkgFlags(ctx context.Context, pkg *loadPkg, flags loadPkgFlags) {
-	if flags == 0 {
-		return
-	}
-
-	if flags.has(pkgInAll) && ld.allPatternIsRoot && !pkg.isTest() {
-		// This package matches a root pattern by virtue of being in "all".
-		flags |= pkgIsRoot
-	}
-	if flags.has(pkgIsRoot) {
-		flags |= pkgFromRoot
-	}
-
-	old := pkg.flags.update(flags)
-	new := old | flags
-	if new == old || !new.has(pkgImportsLoaded) {
-		// We either didn't change the state of pkg, or we don't know anything about
-		// its dependencies yet. Either way, we can't usefully load its test or
-		// update its dependencies.
-		return
-	}
-
-	if !pkg.isTest() {
-		// Check whether we should add (or update the flags for) a test for pkg.
-		// ld.pkgTest is idempotent and extra invocations are inexpensive,
-		// so it's ok if we call it more than is strictly necessary.
-		wantTest := false
-		switch {
-		case ld.allPatternIsRoot && MainModules.Contains(pkg.mod.Path):
-			// We are loading the "all" pattern, which includes packages imported by
-			// tests in the main module. This package is in the main module, so we
-			// need to identify the imports of its test even if LoadTests is not set.
-			//
-			// (We will filter out the extra tests explicitly in computePatternAll.)
-			wantTest = true
-
-		case ld.allPatternIsRoot && ld.allClosesOverTests && new.has(pkgInAll):
-			// This variant of the "all" pattern includes imports of tests of every
-			// package that is itself in "all", and pkg is in "all", so its test is
-			// also in "all" (as above).
-			wantTest = true
-
-		case ld.LoadTests && new.has(pkgIsRoot):
-			// LoadTest explicitly requests tests of “the root packages”.
-			wantTest = true
-		}
-
-		if wantTest {
-			var testFlags loadPkgFlags
-			if MainModules.Contains(pkg.mod.Path) || (ld.allClosesOverTests && new.has(pkgInAll)) {
-				// Tests of packages in the main module are in "all", in the sense that
-				// they cause the packages they import to also be in "all". So are tests
-				// of packages in "all" if "all" closes over test dependencies.
-				testFlags |= pkgInAll
-			}
-			ld.pkgTest(ctx, pkg, testFlags)
-		}
-	}
-
-	if new.has(pkgInAll) && !old.has(pkgInAll|pkgImportsLoaded) {
-		// We have just marked pkg with pkgInAll, or we have just loaded its
-		// imports, or both. Now is the time to propagate pkgInAll to the imports.
-		for _, dep := range pkg.imports {
-			ld.applyPkgFlags(ctx, dep, pkgInAll)
-		}
-	}
-
-	if new.has(pkgFromRoot) && !old.has(pkgFromRoot|pkgImportsLoaded) {
-		for _, dep := range pkg.imports {
-			ld.applyPkgFlags(ctx, dep, pkgFromRoot)
-		}
-	}
-}
-
-// preloadRootModules loads the module requirements needed to identify the
-// selected version of each module providing a package in rootPkgs,
-// adding new root modules to the module graph if needed.
-func (ld *loader) preloadRootModules(ctx context.Context, rootPkgs []string) (changedBuildList bool) {
-	needc := make(chan map[module.Version]bool, 1)
-	needc <- map[module.Version]bool{}
-	for _, path := range rootPkgs {
-		path := path
-		ld.work.Add(func() {
-			// First, try to identify the module containing the package using only roots.
-			//
-			// If the main module is tidy and the package is in "all" — or if we're
-			// lucky — we can identify all of its imports without actually loading the
-			// full module graph.
-			m, _, _, _, err := importFromModules(ctx, path, ld.requirements, nil, ld.skipImportModFiles)
-			if err != nil {
-				var missing *ImportMissingError
-				if errors.As(err, &missing) && ld.ResolveMissingImports {
-					// This package isn't provided by any selected module.
-					// If we can find it, it will be a new root dependency.
-					m, err = queryImport(ctx, path, ld.requirements)
-				}
-				if err != nil {
-					// We couldn't identify the root module containing this package.
-					// Leave it unresolved; we will report it during loading.
-					return
-				}
-			}
-			if m.Path == "" {
-				// The package is in std or cmd. We don't need to change the root set.
-				return
-			}
-
-			v, ok := ld.requirements.rootSelected(m.Path)
-			if !ok || v != m.Version {
-				// We found the requested package in m, but m is not a root, so
-				// loadModGraph will not load its requirements. We need to promote the
-				// module to a root to ensure that any other packages this package
-				// imports are resolved from correct dependency versions.
-				//
-				// (This is the “argument invariant” from
-				// https://golang.org/design/36460-lazy-module-loading.)
-				need := <-needc
-				need[m] = true
-				needc <- need
-			}
-		})
-	}
-	<-ld.work.Idle()
-
-	need := <-needc
-	if len(need) == 0 {
-		return false // No roots to add.
-	}
-
-	toAdd := make([]module.Version, 0, len(need))
-	for m := range need {
-		toAdd = append(toAdd, m)
-	}
-	gover2.ModSort(toAdd)
-
-	rs, err := updateRoots(ctx, ld.requirements.direct, ld.requirements, nil, toAdd, ld.AssumeRootsImported)
-	if err != nil {
-		// We are missing some root dependency, and for some reason we can't load
-		// enough of the module dependency graph to add the missing root. Package
-		// loading is doomed to fail, so fail quickly.
-		ld.error(err)
-		ld.exitIfErrors(ctx)
-		return false
-	}
-	if reflect.DeepEqual(rs.rootModules, ld.requirements.rootModules) {
-		// Something is deeply wrong. resolveMissingImports gave us a non-empty
-		// set of modules to add to the graph, but adding those modules had no
-		// effect — either they were already in the graph, or updateRoots did not
-		// add them as requested.
-		panic(fmt.Sprintf("internal error: adding %v to module graph had no effect on root requirements (%v)", toAdd, rs.rootModules))
-	}
-
-	ld.requirements = rs
-	return true
-}
-
-// load loads an individual package.
-func (ld *loader) load(ctx context.Context, pkg *loadPkg) {
-	var mg *ModuleGraph
-	if ld.requirements.pruning == unpruned {
-		var err error
-		mg, err = ld.requirements.Graph(ctx)
-		if err != nil {
-			// We already checked the error from Graph in loadFromRoots and/or
-			// updateRequirements, so we ignored the error on purpose and we should
-			// keep trying to push past it.
-			//
-			// However, because mg may be incomplete (and thus may select inaccurate
-			// versions), we shouldn't use it to load packages. Instead, we pass a nil
-			// *ModuleGraph, which will cause mg to first try loading from only the
-			// main module and root dependencies.
-			mg = nil
-		}
-	}
-
-	var modroot string
-	pkg.mod, modroot, pkg.dir, pkg.altMods, pkg.err = importFromModules(ctx, pkg.path, ld.requirements, mg, ld.skipImportModFiles)
-	if pkg.dir == "" {
-		return
-	}
-	if MainModules.Contains(pkg.mod.Path) {
-		// Go ahead and mark pkg as in "all". This provides the invariant that a
-		// package that is *only* imported by other packages in "all" is always
-		// marked as such before loading its imports.
-		//
-		// We don't actually rely on that invariant at the moment, but it may
-		// improve efficiency somewhat and makes the behavior a bit easier to reason
-		// about (by reducing churn on the flag bits of dependencies), and costs
-		// essentially nothing (these atomic flag ops are essentially free compared
-		// to scanning source code for imports).
-		ld.applyPkgFlags(ctx, pkg, pkgInAll)
-	}
-	if ld.AllowPackage != nil {
-		if err := ld.AllowPackage(ctx, pkg.path, pkg.mod); err != nil {
-			pkg.err = err
-		}
-	}
-
-	//pkg.inStd = (search.IsStandardImportPath(pkg.path) && search.InDir(pkg.dir, cfg.GOROOTsrc) != "")
-
-	var imports, testImports []string
-
-	var err error
-	imports, testImports, err = scanDir(modroot, pkg.dir, ld.Tags)
-	if err != nil {
-		pkg.err = err
-		return
-	}
-	//}
-
-	pkg.imports = make([]*loadPkg, 0, len(imports))
-	var importFlags loadPkgFlags
-	if pkg.flags.has(pkgInAll) {
-		importFlags = pkgInAll
-	}
-	for _, path := range imports {
-		if pkg.inStd {
-			// Imports from packages in "std" and "cmd" should resolve using
-			// GOROOT/src/vendor even when "std" is not the main module.
-			path = ld.stdVendor(pkg.path, path)
-		}
-		pkg.imports = append(pkg.imports, ld.pkg(ctx, path, importFlags))
-	}
-	pkg.testImports = testImports
-
-	ld.applyPkgFlags(ctx, pkg, pkgImportsLoaded)
-}
-
-// pkgTest locates the test of pkg, creating it if needed, and updates its state
-// to reflect the given flags.
+//			// err is nil, but we intentionally leave pkg.err non-nil and pkg.mod
+//			// unset: we still haven't satisfied other invariants of a
+//			// successfully-loaded package, such as scanning and loading the imports
+//			// of that package. If we succeed in resolving the new dependency graph,
+//			// the caller can reload pkg and update the error at that point.
+//			//
+//			// Even then, the package might not be loaded from the version we've
+//			// identified here. The module may be upgraded by some other dependency,
+//			// or by a transitive dependency of mod itself, or — less likely — the
+//			// package may be rejected by an AllowPackage hook or rendered ambiguous
+//			// by some other newly-added or newly-upgraded dependency.
+//		})
 //
-// pkgTest requires that the imports of pkg have already been loaded (flagged
-// with pkgImportsLoaded).
-func (ld *loader) pkgTest(ctx context.Context, pkg *loadPkg, testFlags loadPkgFlags) *loadPkg {
-	if pkg.isTest() {
-		panic("pkgTest called on a test package")
-	}
+//		pkgMods = append(pkgMods, pkgMod{pkg: pkg, mod: &mod})
+//	}
+//	<-ld.work.Idle()
+//
+//	modAddedBy = map[module.Version]*loadPkg{}
+//
+//	var (
+//		maxTooNew    *gover2.TooNewError
+//		maxTooNewPkg *loadPkg
+//	)
+//	for _, pm := range pkgMods {
+//		if tooNew := (*gover2.TooNewError)(nil); errors.As(pm.pkg.err, &tooNew) {
+//			if maxTooNew == nil || gover2.Compare(tooNew.GoVersion, maxTooNew.GoVersion) > 0 {
+//				maxTooNew = tooNew
+//				maxTooNewPkg = pm.pkg
+//			}
+//		}
+//	}
+//	if maxTooNew != nil {
+//		fmt.Fprintf(os.Stderr, "go: toolchain upgrade needed to resolve %s\n", maxTooNewPkg.path)
+//		return nil, maxTooNew
+//	}
+//
+//	for _, pm := range pkgMods {
+//		pkg, mod := pm.pkg, *pm.mod
+//		if mod.Path == "" {
+//			continue
+//		}
+//
+//		fmt.Fprintf(os.Stderr, "go: found %s in %s %s\n", pkg.path, mod.Path, mod.Version)
+//		if modAddedBy[mod] == nil {
+//			modAddedBy[mod] = pkg
+//		}
+//	}
+//
+//	return modAddedBy, nil
+//}
 
-	createdTest := false
-	pkg.testOnce.Do(func() {
-		pkg.test = &loadPkg{
-			path:   pkg.path,
-			testOf: pkg,
-			mod:    pkg.mod,
-			dir:    pkg.dir,
-			err:    pkg.err,
-			inStd:  pkg.inStd,
-		}
-		ld.applyPkgFlags(ctx, pkg.test, testFlags)
-		createdTest = true
-	})
+//// pkg locates the *loadPkg for path, creating and queuing it for loading if
+//// needed, and updates its state to reflect the given flags.
+////
+//// The imports of the returned *loadPkg will be loaded asynchronously in the
+//// ld.work queue, and its test (if requested) will also be populated once
+//// imports have been resolved. When ld.work goes idle, all transitive imports of
+//// the requested package (and its test, if requested) will have been loaded.
+//func (ld *loader) pkg(ctx context.Context, path string, flags loadPkgFlags) *loadPkg {
+//	if flags.has(pkgImportsLoaded) {
+//		panic("internal error: (*loader).pkg called with pkgImportsLoaded flag set")
+//	}
+//
+//	pkg := ld.pkgCache.Do(path, func() *loadPkg {
+//		pkg := &loadPkg{
+//			path: path,
+//		}
+//		ld.applyPkgFlags(ctx, pkg, flags)
+//
+//		ld.work.Add(func() { ld.load(ctx, pkg) })
+//		return pkg
+//	})
+//
+//	ld.applyPkgFlags(ctx, pkg, flags)
+//	return pkg
+//}
 
-	test := pkg.test
-	if createdTest {
-		test.imports = make([]*loadPkg, 0, len(pkg.testImports))
-		var importFlags loadPkgFlags
-		if test.flags.has(pkgInAll) {
-			importFlags = pkgInAll
-		}
-		for _, path := range pkg.testImports {
-			if pkg.inStd {
-				path = ld.stdVendor(test.path, path)
-			}
-			test.imports = append(test.imports, ld.pkg(ctx, path, importFlags))
-		}
-		pkg.testImports = nil
-		ld.applyPkgFlags(ctx, test, pkgImportsLoaded)
-	} else {
-		ld.applyPkgFlags(ctx, test, testFlags)
-	}
+//// applyPkgFlags updates pkg.flags to set the given flags and propagate the
+//// (transitive) effects of those flags, possibly loading or enqueueing further
+//// packages as a result.
+//func (ld *loader) applyPkgFlags(ctx context.Context, pkg *loadPkg, flags loadPkgFlags) {
+//	if flags == 0 {
+//		return
+//	}
+//
+//	if flags.has(pkgInAll) && ld.allPatternIsRoot && !pkg.isTest() {
+//		// This package matches a root pattern by virtue of being in "all".
+//		flags |= pkgIsRoot
+//	}
+//	if flags.has(pkgIsRoot) {
+//		flags |= pkgFromRoot
+//	}
+//
+//	old := pkg.flags.update(flags)
+//	new := old | flags
+//	if new == old || !new.has(pkgImportsLoaded) {
+//		// We either didn't change the state of pkg, or we don't know anything about
+//		// its dependencies yet. Either way, we can't usefully load its test or
+//		// update its dependencies.
+//		return
+//	}
+//
+//	if !pkg.isTest() {
+//		// Check whether we should add (or update the flags for) a test for pkg.
+//		// ld.pkgTest is idempotent and extra invocations are inexpensive,
+//		// so it's ok if we call it more than is strictly necessary.
+//		wantTest := false
+//		switch {
+//		case ld.allPatternIsRoot && MainModules.Contains(pkg.mod.Path):
+//			// We are loading the "all" pattern, which includes packages imported by
+//			// tests in the main module. This package is in the main module, so we
+//			// need to identify the imports of its test even if LoadTests is not set.
+//			//
+//			// (We will filter out the extra tests explicitly in computePatternAll.)
+//			wantTest = true
+//
+//		case ld.allPatternIsRoot && ld.allClosesOverTests && new.has(pkgInAll):
+//			// This variant of the "all" pattern includes imports of tests of every
+//			// package that is itself in "all", and pkg is in "all", so its test is
+//			// also in "all" (as above).
+//			wantTest = true
+//
+//		case ld.LoadTests && new.has(pkgIsRoot):
+//			// LoadTest explicitly requests tests of “the root packages”.
+//			wantTest = true
+//		}
+//
+//		if wantTest {
+//			var testFlags loadPkgFlags
+//			if MainModules.Contains(pkg.mod.Path) || (ld.allClosesOverTests && new.has(pkgInAll)) {
+//				// Tests of packages in the main module are in "all", in the sense that
+//				// they cause the packages they import to also be in "all". So are tests
+//				// of packages in "all" if "all" closes over test dependencies.
+//				testFlags |= pkgInAll
+//			}
+//			ld.pkgTest(ctx, pkg, testFlags)
+//		}
+//	}
+//
+//	if new.has(pkgInAll) && !old.has(pkgInAll|pkgImportsLoaded) {
+//		// We have just marked pkg with pkgInAll, or we have just loaded its
+//		// imports, or both. Now is the time to propagate pkgInAll to the imports.
+//		for _, dep := range pkg.imports {
+//			ld.applyPkgFlags(ctx, dep, pkgInAll)
+//		}
+//	}
+//
+//	if new.has(pkgFromRoot) && !old.has(pkgFromRoot|pkgImportsLoaded) {
+//		for _, dep := range pkg.imports {
+//			ld.applyPkgFlags(ctx, dep, pkgFromRoot)
+//		}
+//	}
+//}
 
-	return test
-}
+//// preloadRootModules loads the module requirements needed to identify the
+//// selected version of each module providing a package in rootPkgs,
+//// adding new root modules to the module graph if needed.
+//func (ld *loader) preloadRootModules(ctx context.Context, rootPkgs []string) (changedBuildList bool) {
+//	needc := make(chan map[module.Version]bool, 1)
+//	needc <- map[module.Version]bool{}
+//	for _, path := range rootPkgs {
+//		path := path
+//		ld.work.Add(func() {
+//			// First, try to identify the module containing the package using only roots.
+//			//
+//			// If the main module is tidy and the package is in "all" — or if we're
+//			// lucky — we can identify all of its imports without actually loading the
+//			// full module graph.
+//			m, _, _, _, err := importFromModules(ctx, path, ld.requirements, nil, ld.skipImportModFiles)
+//			if err != nil {
+//				var missing *ImportMissingError
+//				if errors.As(err, &missing) && ld.ResolveMissingImports {
+//					// This package isn't provided by any selected module.
+//					// If we can find it, it will be a new root dependency.
+//					m, err = queryImport(ctx, path, ld.requirements)
+//				}
+//				if err != nil {
+//					// We couldn't identify the root module containing this package.
+//					// Leave it unresolved; we will report it during loading.
+//					return
+//				}
+//			}
+//			if m.Path == "" {
+//				// The package is in std or cmd. We don't need to change the root set.
+//				return
+//			}
+//
+//			v, ok := ld.requirements.rootSelected(m.Path)
+//			if !ok || v != m.Version {
+//				// We found the requested package in m, but m is not a root, so
+//				// loadModGraph will not load its requirements. We need to promote the
+//				// module to a root to ensure that any other packages this package
+//				// imports are resolved from correct dependency versions.
+//				//
+//				// (This is the “argument invariant” from
+//				// https://golang.org/design/36460-lazy-module-loading.)
+//				need := <-needc
+//				need[m] = true
+//				needc <- need
+//			}
+//		})
+//	}
+//	<-ld.work.Idle()
+//
+//	need := <-needc
+//	if len(need) == 0 {
+//		return false // No roots to add.
+//	}
+//
+//	toAdd := make([]module.Version, 0, len(need))
+//	for m := range need {
+//		toAdd = append(toAdd, m)
+//	}
+//	gover2.ModSort(toAdd)
+//
+//	rs, err := updateRoots(ctx, ld.requirements.direct, ld.requirements, nil, toAdd, ld.AssumeRootsImported)
+//	if err != nil {
+//		// We are missing some root dependency, and for some reason we can't load
+//		// enough of the module dependency graph to add the missing root. Package
+//		// loading is doomed to fail, so fail quickly.
+//		ld.error(err)
+//		ld.exitIfErrors(ctx)
+//		return false
+//	}
+//	if reflect.DeepEqual(rs.rootModules, ld.requirements.rootModules) {
+//		// Something is deeply wrong. resolveMissingImports gave us a non-empty
+//		// set of modules to add to the graph, but adding those modules had no
+//		// effect — either they were already in the graph, or updateRoots did not
+//		// add them as requested.
+//		panic(fmt.Sprintf("internal error: adding %v to module graph had no effect on root requirements (%v)", toAdd, rs.rootModules))
+//	}
+//
+//	ld.requirements = rs
+//	return true
+//}
+
+//// load loads an individual package.
+//func (ld *loader) load(ctx context.Context, pkg *loadPkg) {
+//	var mg *ModuleGraph
+//	if ld.requirements.pruning == unpruned {
+//		var err error
+//		mg, err = ld.requirements.Graph(ctx)
+//		if err != nil {
+//			// We already checked the error from Graph in loadFromRoots and/or
+//			// updateRequirements, so we ignored the error on purpose and we should
+//			// keep trying to push past it.
+//			//
+//			// However, because mg may be incomplete (and thus may select inaccurate
+//			// versions), we shouldn't use it to load packages. Instead, we pass a nil
+//			// *ModuleGraph, which will cause mg to first try loading from only the
+//			// main module and root dependencies.
+//			mg = nil
+//		}
+//	}
+//
+//	var modroot string
+//	pkg.mod, modroot, pkg.dir, pkg.altMods, pkg.err = importFromModules(ctx, pkg.path, ld.requirements, mg, ld.skipImportModFiles)
+//	if pkg.dir == "" {
+//		return
+//	}
+//	if MainModules.Contains(pkg.mod.Path) {
+//		// Go ahead and mark pkg as in "all". This provides the invariant that a
+//		// package that is *only* imported by other packages in "all" is always
+//		// marked as such before loading its imports.
+//		//
+//		// We don't actually rely on that invariant at the moment, but it may
+//		// improve efficiency somewhat and makes the behavior a bit easier to reason
+//		// about (by reducing churn on the flag bits of dependencies), and costs
+//		// essentially nothing (these atomic flag ops are essentially free compared
+//		// to scanning source code for imports).
+//		ld.applyPkgFlags(ctx, pkg, pkgInAll)
+//	}
+//	if ld.AllowPackage != nil {
+//		if err := ld.AllowPackage(ctx, pkg.path, pkg.mod); err != nil {
+//			pkg.err = err
+//		}
+//	}
+//
+//	//pkg.inStd = (search.IsStandardImportPath(pkg.path) && search.InDir(pkg.dir, cfg.GOROOTsrc) != "")
+//
+//	var imports, testImports []string
+//
+//	var err error
+//	imports, testImports, err = scanDir(modroot, pkg.dir, ld.Tags)
+//	if err != nil {
+//		pkg.err = err
+//		return
+//	}
+//	//}
+//
+//	pkg.imports = make([]*loadPkg, 0, len(imports))
+//	var importFlags loadPkgFlags
+//	if pkg.flags.has(pkgInAll) {
+//		importFlags = pkgInAll
+//	}
+//	for _, path := range imports {
+//		if pkg.inStd {
+//			// Imports from packages in "std" and "cmd" should resolve using
+//			// GOROOT/src/vendor even when "std" is not the main module.
+//			path = ld.stdVendor(pkg.path, path)
+//		}
+//		pkg.imports = append(pkg.imports, ld.pkg(ctx, path, importFlags))
+//	}
+//	pkg.testImports = testImports
+//
+//	ld.applyPkgFlags(ctx, pkg, pkgImportsLoaded)
+//}
+
+//// pkgTest locates the test of pkg, creating it if needed, and updates its state
+//// to reflect the given flags.
+////
+//// pkgTest requires that the imports of pkg have already been loaded (flagged
+//// with pkgImportsLoaded).
+//func (ld *loader) pkgTest(ctx context.Context, pkg *loadPkg, testFlags loadPkgFlags) *loadPkg {
+//	if pkg.isTest() {
+//		panic("pkgTest called on a test package")
+//	}
+//
+//	createdTest := false
+//	pkg.testOnce.Do(func() {
+//		pkg.test = &loadPkg{
+//			path:   pkg.path,
+//			testOf: pkg,
+//			mod:    pkg.mod,
+//			dir:    pkg.dir,
+//			err:    pkg.err,
+//			inStd:  pkg.inStd,
+//		}
+//		ld.applyPkgFlags(ctx, pkg.test, testFlags)
+//		createdTest = true
+//	})
+//
+//	test := pkg.test
+//	if createdTest {
+//		test.imports = make([]*loadPkg, 0, len(pkg.testImports))
+//		var importFlags loadPkgFlags
+//		if test.flags.has(pkgInAll) {
+//			importFlags = pkgInAll
+//		}
+//		for _, path := range pkg.testImports {
+//			if pkg.inStd {
+//				path = ld.stdVendor(test.path, path)
+//			}
+//			test.imports = append(test.imports, ld.pkg(ctx, path, importFlags))
+//		}
+//		pkg.testImports = nil
+//		ld.applyPkgFlags(ctx, test, pkgImportsLoaded)
+//	} else {
+//		ld.applyPkgFlags(ctx, test, testFlags)
+//	}
+//
+//	return test
+//}
 
 // stdVendor returns the canonical import path for the package with the given
 // path when imported from the standard-library package at parentPath.
@@ -1142,223 +1141,223 @@ func (ld *loader) checkMultiplePaths() {
 	}
 }
 
-// checkTidyCompatibility emits an error if any package would be loaded from a
-// different module under rs than under ld.requirements.
-func (ld *loader) checkTidyCompatibility(ctx context.Context, rs *Requirements, compatVersion string) {
-	goVersion := rs.GoVersion()
-	suggestUpgrade := false
-	suggestEFlag := false
-	suggestFixes := func() {
-		if ld.AllowErrors {
-			// The user is explicitly ignoring these errors, so don't bother them with
-			// other options.
-			return
-		}
-
-		// We print directly to os.Stderr because this information is advice about
-		// how to fix errors, not actually an error itself.
-		// (The actual errors should have been logged already.)
-
-		fmt.Fprintln(os.Stderr)
-
-		goFlag := ""
-		if goVersion != MainModules.GoVersion() {
-			goFlag = " -go=" + goVersion
-		}
-
-		compatFlag := ""
-		if compatVersion != gover2.Prev(goVersion) {
-			compatFlag = " -compat=" + compatVersion
-		}
-		if suggestUpgrade {
-			eDesc := ""
-			eFlag := ""
-			if suggestEFlag {
-				eDesc = ", leaving some packages unresolved"
-				eFlag = " -e"
-			}
-			fmt.Fprintf(os.Stderr, "To upgrade to the versions selected by go %s%s:\n\tgo mod tidy%s -go=%s && go mod tidy%s -go=%s%s\n", compatVersion, eDesc, eFlag, compatVersion, eFlag, goVersion, compatFlag)
-		} else if suggestEFlag {
-			// If some packages are missing but no package is upgraded, then we
-			// shouldn't suggest upgrading to the Go 1.16 versions explicitly — that
-			// wouldn't actually fix anything for Go 1.16 users, and *would* break
-			// something for Go 1.17 users.
-			fmt.Fprintf(os.Stderr, "To proceed despite packages unresolved in go %s:\n\tgo mod tidy -e%s%s\n", compatVersion, goFlag, compatFlag)
-		}
-
-		fmt.Fprintf(os.Stderr, "If reproducibility with go %s is not needed:\n\tgo mod tidy%s -compat=%s\n", compatVersion, goFlag, goVersion)
-
-		// TODO(#46141): Populate the linked wiki page.
-		fmt.Fprintf(os.Stderr, "For other options, see:\n\thttps://golang.org/doc/modules/pruning\n")
-	}
-
-	mg, err := rs.Graph(ctx)
-	if err != nil {
-		ld.error(fmt.Errorf("error loading go %s module graph: %w", compatVersion, err))
-		ld.switchIfErrors(ctx)
-		suggestFixes()
-		ld.exitIfErrors(ctx)
-		return
-	}
-
-	// Re-resolve packages in parallel.
-	//
-	// We re-resolve each package — rather than just checking versions — to ensure
-	// that we have fetched module source code (and, importantly, checksums for
-	// that source code) for all modules that are necessary to ensure that imports
-	// are unambiguous. That also produces clearer diagnostics, since we can say
-	// exactly what happened to the package if it became ambiguous or disappeared
-	// entirely.
-	//
-	// We re-resolve the packages in parallel because this process involves disk
-	// I/O to check for package sources, and because the process of checking for
-	// ambiguous imports may require us to download additional modules that are
-	// otherwise pruned out in Go 1.17 — we don't want to block progress on other
-	// packages while we wait for a single new download.
-	type mismatch struct {
-		mod module.Version
-		err error
-	}
-	mismatchMu := make(chan map[*loadPkg]mismatch, 1)
-	mismatchMu <- map[*loadPkg]mismatch{}
-	for _, pkg := range ld.pkgs {
-		if pkg.mod.Path == "" && pkg.err == nil {
-			// This package is from the standard library (which does not vary based on
-			// the module graph).
-			continue
-		}
-
-		pkg := pkg
-		ld.work.Add(func() {
-			mod, _, _, _, err := importFromModules(ctx, pkg.path, rs, mg, ld.skipImportModFiles)
-			if mod != pkg.mod {
-				mismatches := <-mismatchMu
-				mismatches[pkg] = mismatch{mod: mod, err: err}
-				mismatchMu <- mismatches
-			}
-		})
-	}
-	<-ld.work.Idle()
-
-	mismatches := <-mismatchMu
-	if len(mismatches) == 0 {
-		// Since we're running as part of 'go mod tidy', the roots of the module
-		// graph should contain only modules that are relevant to some package in
-		// the package graph. We checked every package in the package graph and
-		// didn't find any mismatches, so that must mean that all of the roots of
-		// the module graph are also consistent.
-		//
-		// If we're wrong, Go 1.16 in -mod=readonly mode will error out with
-		// "updates to go.mod needed", which would be very confusing. So instead,
-		// we'll double-check that our reasoning above actually holds — if it
-		// doesn't, we'll emit an internal error and hopefully the user will report
-		// it as a bug.
-		for _, m := range ld.requirements.rootModules {
-			if v := mg.Selected(m.Path); v != m.Version {
-				fmt.Fprintln(os.Stderr)
-				log.Fatalf("go: internal error: failed to diagnose selected-version mismatch for module %s: go %s selects %s, but go %s selects %s\n\tPlease report this at https://golang.org/issue.", m.Path, goVersion, m.Version, compatVersion, v)
-			}
-		}
-		return
-	}
-
-	// Iterate over the packages (instead of the mismatches map) to emit errors in
-	// deterministic order.
-	for _, pkg := range ld.pkgs {
-		mismatch, ok := mismatches[pkg]
-		if !ok {
-			continue
-		}
-
-		if pkg.isTest() {
-			// We already did (or will) report an error for the package itself,
-			// so don't report a duplicate (and more verbose) error for its test.
-			if _, ok := mismatches[pkg.testOf]; !ok {
-				log.Fatalf("go: internal error: mismatch recorded for test %s, but not its non-test package", pkg.path)
-			}
-			continue
-		}
-
-		switch {
-		case mismatch.err != nil:
-			// pkg resolved successfully, but errors out using the requirements in rs.
-			//
-			// This could occur because the import is provided by a single root (and
-			// is thus unambiguous in a main module with a pruned module graph) and
-			// also one or more transitive dependencies (and is ambiguous with an
-			// unpruned graph).
-			//
-			// It could also occur because some transitive dependency upgrades the
-			// module that previously provided the package to a version that no
-			// longer does, or to a version for which the module source code (but
-			// not the go.mod file in isolation) has a checksum error.
-			if missing := (*ImportMissingError)(nil); errors.As(mismatch.err, &missing) {
-				selected := module.Version{
-					Path:    pkg.mod.Path,
-					Version: mg.Selected(pkg.mod.Path),
-				}
-				ld.error(fmt.Errorf("%s loaded from %v,\n\tbut go %s would fail to locate it in %s", pkg.stackText(), pkg.mod, compatVersion, selected))
-			} else {
-				if ambiguous := (*AmbiguousImportError)(nil); errors.As(mismatch.err, &ambiguous) {
-					// TODO: Is this check needed?
-				}
-				ld.error(fmt.Errorf("%s loaded from %v,\n\tbut go %s would fail to locate it:\n\t%v", pkg.stackText(), pkg.mod, compatVersion, mismatch.err))
-			}
-
-			suggestEFlag = true
-
-			// Even if we press ahead with the '-e' flag, the older version will
-			// error out in readonly mode if it thinks the go.mod file contains
-			// any *explicit* dependency that is not at its selected version,
-			// even if that dependency is not relevant to any package being loaded.
-			//
-			// We check for that condition here. If all of the roots are consistent
-			// the '-e' flag suffices, but otherwise we need to suggest an upgrade.
-			if !suggestUpgrade {
-				for _, m := range ld.requirements.rootModules {
-					if v := mg.Selected(m.Path); v != m.Version {
-						suggestUpgrade = true
-						break
-					}
-				}
-			}
-
-		case pkg.err != nil:
-			// pkg had an error in with a pruned module graph (presumably suppressed
-			// with the -e flag), but the error went away using an unpruned graph.
-			//
-			// This is possible, if, say, the import is unresolved in the pruned graph
-			// (because the "latest" version of each candidate module either is
-			// unavailable or does not contain the package), but is resolved in the
-			// unpruned graph due to a newer-than-latest dependency that is normally
-			// pruned out.
-			//
-			// This could also occur if the source code for the module providing the
-			// package in the pruned graph has a checksum error, but the unpruned
-			// graph upgrades that module to a version with a correct checksum.
-			//
-			// pkg.err should have already been logged elsewhere — along with a
-			// stack trace — so log only the import path and non-error info here.
-			suggestUpgrade = true
-			ld.error(fmt.Errorf("%s failed to load from any module,\n\tbut go %s would load it from %v", pkg.path, compatVersion, mismatch.mod))
-
-		case pkg.mod != mismatch.mod:
-			// The package is loaded successfully by both Go versions, but from a
-			// different module in each. This could lead to subtle (and perhaps even
-			// unnoticed!) variations in behavior between builds with different
-			// toolchains.
-			suggestUpgrade = true
-			ld.error(fmt.Errorf("%s loaded from %v,\n\tbut go %s would select %v\n", pkg.stackText(), pkg.mod, compatVersion, mismatch.mod.Version))
-
-		default:
-			log.Fatalf("go: internal error: mismatch recorded for package %s, but no differences found", pkg.path)
-		}
-	}
-
-	ld.switchIfErrors(ctx)
-	suggestFixes()
-	ld.exitIfErrors(ctx)
-}
+//// checkTidyCompatibility emits an error if any package would be loaded from a
+//// different module under rs than under ld.requirements.
+//func (ld *loader) checkTidyCompatibility(ctx context.Context, rs *Requirements, compatVersion string) {
+//	goVersion := rs.GoVersion()
+//	suggestUpgrade := false
+//	suggestEFlag := false
+//	suggestFixes := func() {
+//		if ld.AllowErrors {
+//			// The user is explicitly ignoring these errors, so don't bother them with
+//			// other options.
+//			return
+//		}
+//
+//		// We print directly to os.Stderr because this information is advice about
+//		// how to fix errors, not actually an error itself.
+//		// (The actual errors should have been logged already.)
+//
+//		fmt.Fprintln(os.Stderr)
+//
+//		goFlag := ""
+//		if goVersion != MainModules.GoVersion() {
+//			goFlag = " -go=" + goVersion
+//		}
+//
+//		compatFlag := ""
+//		if compatVersion != gover2.Prev(goVersion) {
+//			compatFlag = " -compat=" + compatVersion
+//		}
+//		if suggestUpgrade {
+//			eDesc := ""
+//			eFlag := ""
+//			if suggestEFlag {
+//				eDesc = ", leaving some packages unresolved"
+//				eFlag = " -e"
+//			}
+//			fmt.Fprintf(os.Stderr, "To upgrade to the versions selected by go %s%s:\n\tgo mod tidy%s -go=%s && go mod tidy%s -go=%s%s\n", compatVersion, eDesc, eFlag, compatVersion, eFlag, goVersion, compatFlag)
+//		} else if suggestEFlag {
+//			// If some packages are missing but no package is upgraded, then we
+//			// shouldn't suggest upgrading to the Go 1.16 versions explicitly — that
+//			// wouldn't actually fix anything for Go 1.16 users, and *would* break
+//			// something for Go 1.17 users.
+//			fmt.Fprintf(os.Stderr, "To proceed despite packages unresolved in go %s:\n\tgo mod tidy -e%s%s\n", compatVersion, goFlag, compatFlag)
+//		}
+//
+//		fmt.Fprintf(os.Stderr, "If reproducibility with go %s is not needed:\n\tgo mod tidy%s -compat=%s\n", compatVersion, goFlag, goVersion)
+//
+//		// TODO(#46141): Populate the linked wiki page.
+//		fmt.Fprintf(os.Stderr, "For other options, see:\n\thttps://golang.org/doc/modules/pruning\n")
+//	}
+//
+//	mg, err := rs.Graph(ctx)
+//	if err != nil {
+//		ld.error(fmt.Errorf("error loading go %s module graph: %w", compatVersion, err))
+//		ld.switchIfErrors(ctx)
+//		suggestFixes()
+//		ld.exitIfErrors(ctx)
+//		return
+//	}
+//
+//	// Re-resolve packages in parallel.
+//	//
+//	// We re-resolve each package — rather than just checking versions — to ensure
+//	// that we have fetched module source code (and, importantly, checksums for
+//	// that source code) for all modules that are necessary to ensure that imports
+//	// are unambiguous. That also produces clearer diagnostics, since we can say
+//	// exactly what happened to the package if it became ambiguous or disappeared
+//	// entirely.
+//	//
+//	// We re-resolve the packages in parallel because this process involves disk
+//	// I/O to check for package sources, and because the process of checking for
+//	// ambiguous imports may require us to download additional modules that are
+//	// otherwise pruned out in Go 1.17 — we don't want to block progress on other
+//	// packages while we wait for a single new download.
+//	type mismatch struct {
+//		mod module.Version
+//		err error
+//	}
+//	mismatchMu := make(chan map[*loadPkg]mismatch, 1)
+//	mismatchMu <- map[*loadPkg]mismatch{}
+//	for _, pkg := range ld.pkgs {
+//		if pkg.mod.Path == "" && pkg.err == nil {
+//			// This package is from the standard library (which does not vary based on
+//			// the module graph).
+//			continue
+//		}
+//
+//		pkg := pkg
+//		ld.work.Add(func() {
+//			mod, _, _, _, err := importFromModules(ctx, pkg.path, rs, mg, ld.skipImportModFiles)
+//			if mod != pkg.mod {
+//				mismatches := <-mismatchMu
+//				mismatches[pkg] = mismatch{mod: mod, err: err}
+//				mismatchMu <- mismatches
+//			}
+//		})
+//	}
+//	<-ld.work.Idle()
+//
+//	mismatches := <-mismatchMu
+//	if len(mismatches) == 0 {
+//		// Since we're running as part of 'go mod tidy', the roots of the module
+//		// graph should contain only modules that are relevant to some package in
+//		// the package graph. We checked every package in the package graph and
+//		// didn't find any mismatches, so that must mean that all of the roots of
+//		// the module graph are also consistent.
+//		//
+//		// If we're wrong, Go 1.16 in -mod=readonly mode will error out with
+//		// "updates to go.mod needed", which would be very confusing. So instead,
+//		// we'll double-check that our reasoning above actually holds — if it
+//		// doesn't, we'll emit an internal error and hopefully the user will report
+//		// it as a bug.
+//		for _, m := range ld.requirements.rootModules {
+//			if v := mg.Selected(m.Path); v != m.Version {
+//				fmt.Fprintln(os.Stderr)
+//				log.Fatalf("go: internal error: failed to diagnose selected-version mismatch for module %s: go %s selects %s, but go %s selects %s\n\tPlease report this at https://golang.org/issue.", m.Path, goVersion, m.Version, compatVersion, v)
+//			}
+//		}
+//		return
+//	}
+//
+//	// Iterate over the packages (instead of the mismatches map) to emit errors in
+//	// deterministic order.
+//	for _, pkg := range ld.pkgs {
+//		mismatch, ok := mismatches[pkg]
+//		if !ok {
+//			continue
+//		}
+//
+//		if pkg.isTest() {
+//			// We already did (or will) report an error for the package itself,
+//			// so don't report a duplicate (and more verbose) error for its test.
+//			if _, ok := mismatches[pkg.testOf]; !ok {
+//				log.Fatalf("go: internal error: mismatch recorded for test %s, but not its non-test package", pkg.path)
+//			}
+//			continue
+//		}
+//
+//		switch {
+//		case mismatch.err != nil:
+//			// pkg resolved successfully, but errors out using the requirements in rs.
+//			//
+//			// This could occur because the import is provided by a single root (and
+//			// is thus unambiguous in a main module with a pruned module graph) and
+//			// also one or more transitive dependencies (and is ambiguous with an
+//			// unpruned graph).
+//			//
+//			// It could also occur because some transitive dependency upgrades the
+//			// module that previously provided the package to a version that no
+//			// longer does, or to a version for which the module source code (but
+//			// not the go.mod file in isolation) has a checksum error.
+//			if missing := (*ImportMissingError)(nil); errors.As(mismatch.err, &missing) {
+//				selected := module.Version{
+//					Path:    pkg.mod.Path,
+//					Version: mg.Selected(pkg.mod.Path),
+//				}
+//				ld.error(fmt.Errorf("%s loaded from %v,\n\tbut go %s would fail to locate it in %s", pkg.stackText(), pkg.mod, compatVersion, selected))
+//			} else {
+//				if ambiguous := (*AmbiguousImportError)(nil); errors.As(mismatch.err, &ambiguous) {
+//					// TODO: Is this check needed?
+//				}
+//				ld.error(fmt.Errorf("%s loaded from %v,\n\tbut go %s would fail to locate it:\n\t%v", pkg.stackText(), pkg.mod, compatVersion, mismatch.err))
+//			}
+//
+//			suggestEFlag = true
+//
+//			// Even if we press ahead with the '-e' flag, the older version will
+//			// error out in readonly mode if it thinks the go.mod file contains
+//			// any *explicit* dependency that is not at its selected version,
+//			// even if that dependency is not relevant to any package being loaded.
+//			//
+//			// We check for that condition here. If all of the roots are consistent
+//			// the '-e' flag suffices, but otherwise we need to suggest an upgrade.
+//			if !suggestUpgrade {
+//				for _, m := range ld.requirements.rootModules {
+//					if v := mg.Selected(m.Path); v != m.Version {
+//						suggestUpgrade = true
+//						break
+//					}
+//				}
+//			}
+//
+//		case pkg.err != nil:
+//			// pkg had an error in with a pruned module graph (presumably suppressed
+//			// with the -e flag), but the error went away using an unpruned graph.
+//			//
+//			// This is possible, if, say, the import is unresolved in the pruned graph
+//			// (because the "latest" version of each candidate module either is
+//			// unavailable or does not contain the package), but is resolved in the
+//			// unpruned graph due to a newer-than-latest dependency that is normally
+//			// pruned out.
+//			//
+//			// This could also occur if the source code for the module providing the
+//			// package in the pruned graph has a checksum error, but the unpruned
+//			// graph upgrades that module to a version with a correct checksum.
+//			//
+//			// pkg.err should have already been logged elsewhere — along with a
+//			// stack trace — so log only the import path and non-error info here.
+//			suggestUpgrade = true
+//			ld.error(fmt.Errorf("%s failed to load from any module,\n\tbut go %s would load it from %v", pkg.path, compatVersion, mismatch.mod))
+//
+//		case pkg.mod != mismatch.mod:
+//			// The package is loaded successfully by both Go versions, but from a
+//			// different module in each. This could lead to subtle (and perhaps even
+//			// unnoticed!) variations in behavior between builds with different
+//			// toolchains.
+//			suggestUpgrade = true
+//			ld.error(fmt.Errorf("%s loaded from %v,\n\tbut go %s would select %v\n", pkg.stackText(), pkg.mod, compatVersion, mismatch.mod.Version))
+//
+//		default:
+//			log.Fatalf("go: internal error: mismatch recorded for package %s, but no differences found", pkg.path)
+//		}
+//	}
+//
+//	ld.switchIfErrors(ctx)
+//	suggestFixes()
+//	ld.exitIfErrors(ctx)
+//}
 
 // scanDir is like imports.ScanDir but elides known magic imports from the list,
 // so that we do not go looking for packages that don't really exist.

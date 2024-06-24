@@ -282,39 +282,39 @@ func UpgradeAll(target module.Version, reqs UpgradeReqs) ([]module.Version, erro
 	})
 }
 
-// Upgrade returns a build list for the target module
-// in which the given additional modules are upgraded.
-func Upgrade(target module.Version, reqs UpgradeReqs, upgrade ...module.Version) ([]module.Version, error) {
-	list, err := reqs.Required(target)
-	if err != nil {
-		return nil, err
-	}
-
-	pathInList := make(map[string]bool, len(list))
-	for _, m := range list {
-		pathInList[m.Path] = true
-	}
-	list = append([]module.Version(nil), list...)
-
-	upgradeTo := make(map[string]string, len(upgrade))
-	for _, u := range upgrade {
-		if !pathInList[u.Path] {
-			list = append(list, module.Version{Path: u.Path, Version: "none"})
-		}
-		if prev, dup := upgradeTo[u.Path]; dup {
-			upgradeTo[u.Path] = reqs.Max(u.Path, prev, u.Version)
-		} else {
-			upgradeTo[u.Path] = u.Version
-		}
-	}
-
-	return buildList([]module.Version{target}, &override{target, list, reqs}, func(m module.Version) (module.Version, error) {
-		if v, ok := upgradeTo[m.Path]; ok {
-			return module.Version{Path: m.Path, Version: v}, nil
-		}
-		return m, nil
-	})
-}
+//// Upgrade returns a build list for the target module
+//// in which the given additional modules are upgraded.
+//func Upgrade(target module.Version, reqs UpgradeReqs, upgrade ...module.Version) ([]module.Version, error) {
+//	list, err := reqs.Required(target)
+//	if err != nil {
+//		return nil, err
+//	}
+//
+//	pathInList := make(map[string]bool, len(list))
+//	for _, m := range list {
+//		pathInList[m.Path] = true
+//	}
+//	list = append([]module.Version(nil), list...)
+//
+//	upgradeTo := make(map[string]string, len(upgrade))
+//	for _, u := range upgrade {
+//		if !pathInList[u.Path] {
+//			list = append(list, module.Version{Path: u.Path, Version: "none"})
+//		}
+//		if prev, dup := upgradeTo[u.Path]; dup {
+//			upgradeTo[u.Path] = reqs.Max(u.Path, prev, u.Version)
+//		} else {
+//			upgradeTo[u.Path] = u.Version
+//		}
+//	}
+//
+//	return buildList([]module.Version{target}, &override{target, list, reqs}, func(m module.Version) (module.Version, error) {
+//		if v, ok := upgradeTo[m.Path]; ok {
+//			return module.Version{Path: m.Path, Version: v}, nil
+//		}
+//		return m, nil
+//	})
+//}
 
 // Downgrade returns a build list for the target module
 // in which the given additional modules are downgraded,

@@ -7,11 +7,7 @@ package modload
 import (
 	"context"
 	"errors"
-	"fmt"
-	"github.com/inovacc/moonlight/pkg/module/internal/gover"
 	"github.com/inovacc/moonlight/pkg/module/internal/modfetch/codehost"
-	"github.com/inovacc/moonlight/pkg/module/internal/pkgpattern"
-	"os"
 	"strings"
 
 	"golang.org/x/mod/module"
@@ -24,7 +20,7 @@ const (
 	ListRetracted
 	ListDeprecated
 	ListVersions
-	ListRetractedVersions
+	//ListRetractedVersions
 )
 
 // ListModules returns a description of the modules matching args, if known,
@@ -34,12 +30,12 @@ const (
 func ListModules(ctx context.Context, args []string) ([]*ModulePublic, error) {
 	var mods []*ModulePublic
 	var reuse map[module.Version]*ModulePublic
-	var mg *ModuleGraph
-	var rs *Requirements
+	//var mg *ModuleGraph
+	//var rs *Requirements
 	var mgErr error
 
 	var mode = ListU | ListRetracted | ListDeprecated | ListVersions
-	matchedModule := map[module.Version]bool{}
+	//matchedModule := map[module.Version]bool{}
 	for _, arg := range args {
 		if path, vers, found := strings.Cut(arg, "@"); found {
 			var current string
@@ -78,68 +74,68 @@ func ListModules(ctx context.Context, args []string) ([]*ModulePublic, error) {
 			continue
 		}
 
-		// Module path or pattern.
-		var match func(string) bool
-		if arg == "all" {
-			match = func(p string) bool { return !gover.IsToolchain(p) }
-		} else if strings.Contains(arg, "...") {
-			mp := pkgpattern.MatchPattern(arg)
-			match = func(p string) bool { return mp(p) && !gover.IsToolchain(p) }
-		} else {
-			var v string
-			if mg == nil {
-				var ok bool
-				v, ok = rs.rootSelected(arg)
-				if !ok {
-					// We checked rootSelected(arg) in the earlier args loop, so if there
-					// is no such root we should have loaded a non-nil mg.
-					panic(fmt.Sprintf("internal error: root requirement expected but not found for %v", arg))
-				}
-			} else {
-				v = mg.Selected(arg)
-			}
-			if v == "none" && mgErr != nil {
-				// mgErr is already set, so just skip this module.
-				continue
-			}
-			if v != "none" {
-				mods = append(mods, moduleInfo(ctx, rs, module.Version{Path: arg, Version: v}, mode, reuse))
-				/*	} else if cfg.BuildMod == "vendor" {
-					// In vendor mode, we can't determine whether a missing module is “a
-					// known dependency” because the module graph is incomplete.
-					// Give a more explicit error message.
-					mods = append(mods, &modinfo.ModulePublic{
-						Path:  arg,
-						Error: modinfoError(arg, "", errors.New("can't resolve module using the vendor directory\n\t(Use -mod=mod or -mod=readonly to bypass.)")),
-					})
-				} */
-			} else if mode&ListVersions != 0 {
-				// Don't make the user provide an explicit '@latest' when they're
-				// explicitly asking what the available versions are. Instead, return a
-				// module with version "none", to which we can add the requested list.
-				mods = append(mods, &ModulePublic{Path: arg})
-			} else {
-				mods = append(mods, &ModulePublic{
-					Path:  arg,
-					Error: modinfoError(arg, "", errors.New("not a known dependency")),
-				})
-			}
-			continue
-		}
-
-		matched := false
-		for _, m := range mg.BuildList() {
-			if match(m.Path) {
-				matched = true
-				if !matchedModule[m] {
-					matchedModule[m] = true
-					mods = append(mods, moduleInfo(ctx, rs, m, mode, reuse))
-				}
-			}
-		}
-		if !matched {
-			fmt.Fprintf(os.Stderr, "warning: pattern %q matched no module dependencies\n", arg)
-		}
+		//// Module path or pattern.
+		//var match func(string) bool
+		//if arg == "all" {
+		//	match = func(p string) bool { return !gover.IsToolchain(p) }
+		//} else if strings.Contains(arg, "...") {
+		//	mp := pkgpattern.MatchPattern(arg)
+		//	match = func(p string) bool { return mp(p) && !gover.IsToolchain(p) }
+		//} else {
+		//	var v string
+		//	if mg == nil {
+		//		var ok bool
+		//		v, ok = rs.rootSelected(arg)
+		//		if !ok {
+		//			// We checked rootSelected(arg) in the earlier args loop, so if there
+		//			// is no such root we should have loaded a non-nil mg.
+		//			panic(fmt.Sprintf("internal error: root requirement expected but not found for %v", arg))
+		//		}
+		//	} else {
+		//		v = mg.Selected(arg)
+		//	}
+		//	if v == "none" && mgErr != nil {
+		//		// mgErr is already set, so just skip this module.
+		//		continue
+		//	}
+		//	if v != "none" {
+		//		mods = append(mods, moduleInfo(ctx, rs, module.Version{Path: arg, Version: v}, mode, reuse))
+		//		/*	} else if cfg.BuildMod == "vendor" {
+		//			// In vendor mode, we can't determine whether a missing module is “a
+		//			// known dependency” because the module graph is incomplete.
+		//			// Give a more explicit error message.
+		//			mods = append(mods, &modinfo.ModulePublic{
+		//				Path:  arg,
+		//				Error: modinfoError(arg, "", errors.New("can't resolve module using the vendor directory\n\t(Use -mod=mod or -mod=readonly to bypass.)")),
+		//			})
+		//		} */
+		//	} else if mode&ListVersions != 0 {
+		//		// Don't make the user provide an explicit '@latest' when they're
+		//		// explicitly asking what the available versions are. Instead, return a
+		//		// module with version "none", to which we can add the requested list.
+		//		mods = append(mods, &ModulePublic{Path: arg})
+		//	} else {
+		//		mods = append(mods, &ModulePublic{
+		//			Path:  arg,
+		//			Error: modinfoError(arg, "", errors.New("not a known dependency")),
+		//		})
+		//	}
+		//	continue
+		//}
+		//
+		//matched := false
+		//for _, m := range mg.BuildList() {
+		//	if match(m.Path) {
+		//		matched = true
+		//		if !matchedModule[m] {
+		//			matchedModule[m] = true
+		//			mods = append(mods, moduleInfo(ctx, rs, m, mode, reuse))
+		//		}
+		//	}
+		//}
+		//if !matched {
+		//	fmt.Fprintf(os.Stderr, "warning: pattern %q matched no module dependencies\n", arg)
+		//}
 
 	}
 

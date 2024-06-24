@@ -16,7 +16,7 @@ const proxyDefault = "https://proxy.golang.org,direct"
 var cfg = &Config{}
 
 func init() {
-	cfgFile, err := filepath.Abs("../../config.yaml")
+	cfgFile, err := filepath.Abs("../../../../config.yaml")
 	if err != nil {
 		panic(err)
 	}

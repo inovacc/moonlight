@@ -16,24 +16,24 @@ import (
 	"golang.org/x/mod/module"
 )
 
-// cmpVersion implements the comparison for versions in the module loader.
-//
-// It is consistent with gover.ModCompare except that as a special case,
-// the version "" is considered higher than all other versions.
-// The main module (also known as the target) has no version and must be chosen
-// over other versions of the same module in the module dependency graph.
-func cmpVersion(p string, v1, v2 string) int {
-	if v2 == "" {
-		if v1 == "" {
-			return 0
-		}
-		return -1
-	}
-	if v1 == "" {
-		return 1
-	}
-	return gover.ModCompare(p, v1, v2)
-}
+//// cmpVersion implements the comparison for versions in the module loader.
+////
+//// It is consistent with gover.ModCompare except that as a special case,
+//// the version "" is considered higher than all other versions.
+//// The main module (also known as the target) has no version and must be chosen
+//// over other versions of the same module in the module dependency graph.
+//func cmpVersion(p string, v1, v2 string) int {
+//	if v2 == "" {
+//		if v1 == "" {
+//			return 0
+//		}
+//		return -1
+//	}
+//	if v1 == "" {
+//		return 1
+//	}
+//	return gover.ModCompare(p, v1, v2)
+//}
 
 // mvsReqs implements mvs.Reqs for module semantic versions,
 // with any exclusions or replacements applied internally.
@@ -59,18 +59,18 @@ func (r *mvsReqs) Required(mod module.Version) ([]module.Version, error) {
 	return summary.require, nil
 }
 
-// Max returns the maximum of v1 and v2 according to gover.ModCompare.
-//
-// As a special case, the version "" is considered higher than all other
-// versions. The main module (also known as the target) has no version and must
-// be chosen over other versions of the same module in the module dependency
-// graph.
-func (*mvsReqs) Max(p, v1, v2 string) string {
-	if cmpVersion(p, v1, v2) < 0 {
-		return v2
-	}
-	return v1
-}
+//// Max returns the maximum of v1 and v2 according to gover.ModCompare.
+////
+//// As a special case, the version "" is considered higher than all other
+//// versions. The main module (also known as the target) has no version and must
+//// be chosen over other versions of the same module in the module dependency
+//// graph.
+//func (*mvsReqs) Max(p, v1, v2 string) string {
+//	if cmpVersion(p, v1, v2) < 0 {
+//		return v2
+//	}
+//	return v1
+//}
 
 // Upgrade is a no-op, here to implement mvs.Reqs.
 // The upgrade logic for go get -u is in ../modget/get.go.

@@ -1,4 +1,4 @@
-package module
+package modload
 
 import (
 	"context"

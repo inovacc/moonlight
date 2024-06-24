@@ -595,16 +595,16 @@ func loadModFile(ctx context.Context, opts *PackageOpts) (*Requirements, error) 
 
 	mainModule := MainModules.mustGetSingleMainModule()
 
-	if rs.hasRedundantRoot() {
-		// If any module path appears more than once in the roots, we know that the
-		// go.mod file needs to be updated even though we have not yet loaded any
-		// transitive dependencies.
-		var err error
-		rs, err = updateRoots(ctx, rs.direct, rs, nil, nil, false)
-		if err != nil {
-			return nil, err
-		}
-	}
+	//if rs.hasRedundantRoot() {
+	//	// If any module path appears more than once in the roots, we know that the
+	//	// go.mod file needs to be updated even though we have not yet loaded any
+	//	// transitive dependencies.
+	//	var err error
+	//	rs, err = updateRoots(ctx, rs.direct, rs, nil, nil, false)
+	//	if err != nil {
+	//		return nil, err
+	//	}
+	//}
 
 	if MainModules.Index(mainModule).goVersion == "" && rs.pruning != workspace {
 		// TODO(#45551): Do something more principled instead of checking
