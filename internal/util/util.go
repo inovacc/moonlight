@@ -12,7 +12,7 @@ func NewSHA256(data string) string {
 	return fmt.Sprintf("%x", hash[:])
 }
 
-func GetKSUID() string {
+func GetID() string {
 	id := ksuid.New()
 	return hex.EncodeToString(id.Bytes())
 }

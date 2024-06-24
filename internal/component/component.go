@@ -28,7 +28,7 @@ func Run(cmd *cobra.Command, _ []string) error {
 			slog.Error(err.Error())
 		}
 
-		mapVerse, err := mapper.NewMapVersions(goVer)
+		mapVerse, err := mapper.NewMapVersions(cmd.Context(), database.GetConnection(), goVer)
 		if err != nil {
 			slog.Error(err.Error())
 		}
@@ -44,8 +44,6 @@ func Run(cmd *cobra.Command, _ []string) error {
 	if _, err = c.AddFunc("*/1 * * * *", job); err != nil {
 		return err
 	}
-
-	c.Start()
 
 	slog.Info("Main component started")
 
