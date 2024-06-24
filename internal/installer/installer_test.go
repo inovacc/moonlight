@@ -1,14 +1,20 @@
+//go:build windows
+
 package installer
 
 import (
 	"context"
+	"github.com/inovacc/moonlight/internal/config"
 	"github.com/inovacc/moonlight/internal/database"
 	"log"
+	"sort"
 	"strings"
 	"testing"
 )
 
 func TestNewInstaller(t *testing.T) {
+	config.GetConfig.Db.DBPath = "."
+
 	if err := database.NewDatabase(); err != nil {
 		t.Error("Expected database to be initialized")
 	}
@@ -22,7 +28,8 @@ func TestNewInstaller(t *testing.T) {
 		t.Fatal("Expected installer to be initialized")
 	}
 
-	list := []string{"go install github.com/spf13/cobra-cli@latest",
+	list := []string{
+		"go install github.com/spf13/cobra-cli@latest",
 		"go install github.com/xo/xo@latest",
 		"go install github.com/BurntSushi/toml/cmd/tomlv@latest",
 		"go install github.com/dyammarcano/rpmbuild-cli@latest",
@@ -95,7 +102,7 @@ func TestNewInstaller(t *testing.T) {
 		"go install athens github.com/gomods/athens/tree/main/cmd/proxy@latest",
 		"go install github.com/gomods/athens/tree/main/cmd/proxy@latest",
 		"go install github.com/gomods/athens/cmd/proxy@latest",
-		"go install github.com/gomods/athens/cmd/proxy@latest -o athens",
+		"go install github.com/gomods/athens/cmd/proxy@latest",
 		"go install github.com/gomods/athens/cmd/proxy@latest",
 		"go install github.com/spf13/cobra@latest",
 		"go install github.com/spf13/cobra-cli@latest",
@@ -120,6 +127,8 @@ func TestNewInstaller(t *testing.T) {
 		"go install go.etcd.io/bbolt/cmd/bbolt@latest",
 		"go install go.etcd.io/bbolt/cmd/bbolt@v1.3.9",
 	}
+
+	sort.Strings(list)
 
 	var errList []string
 

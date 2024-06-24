@@ -114,12 +114,12 @@ func (i *Installer) Command(command string) error {
 		return fmt.Errorf("invalid url format")
 	}
 
-	parsedCommand[2], err = getBaseURL(urlList[0])
+	currentVal, err := getBaseURL(urlList[0])
 	if err != nil {
 		return err
 	}
 
-	module, err := i.getModuleInfo(ctxTimeout, parsedCommand[2], tmpDir)
+	module, err := i.getModuleInfo(ctxTimeout, currentVal, tmpDir)
 	if err != nil {
 		return err
 	}
@@ -142,6 +142,11 @@ func (i *Installer) validateCommand(command string) ([]string, error) {
 	if !strings.HasPrefix(parsedCommand[1], commandPrefixInstall) {
 		return nil, fmt.Errorf("invalid command, must have prefix %s", commandPrefixInstall)
 	}
+
+	if !strings.Contains(parsedCommand[len(parsedCommand)-1], "@") {
+		parsedCommand[len(parsedCommand)-1] = fmt.Sprintf("%s@latest", parsedCommand[len(parsedCommand)-1])
+	}
+
 	return parsedCommand, nil
 }
 
@@ -193,7 +198,7 @@ func (i *Installer) saveModuleInfo(ctx context.Context, command string, module M
 	moduleStr := strings.Join(module.Versions, ",")
 
 	var installerID int64
-	if err := tx.QueryRowContext(ctx, insertInstaller, module.Version, command, dependencies).Scan(&installerID); err != nil {
+	if err = tx.QueryRowContext(ctx, insertInstaller, module.Version, command, dependencies).Scan(&installerID); err != nil {
 		tx.Rollback()
 		return err
 	}
