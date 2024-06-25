@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/Masterminds/semver/v3"
-	"github.com/inovacc/moonlight/internal/cron"
+	"github.com/inovacc/moonlight/pkg/cron"
 	"github.com/jmoiron/sqlx"
 	"github.com/spf13/afero"
 	"net/url"

@@ -5,8 +5,8 @@ package installer
 import (
 	"context"
 	"github.com/inovacc/moonlight/internal/config"
-	"github.com/inovacc/moonlight/internal/database"
 	"github.com/inovacc/moonlight/internal/util"
+	"github.com/inovacc/moonlight/pkg/database"
 	"log"
 	"strings"
 	"testing"

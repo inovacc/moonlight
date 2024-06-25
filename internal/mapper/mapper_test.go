@@ -1,7 +1,7 @@
 package mapper
 
 import (
-	"github.com/inovacc/moonlight/internal/database"
+	"github.com/inovacc/moonlight/pkg/database"
 	"github.com/inovacc/moonlight/pkg/versions"
 	"github.com/stretchr/testify/assert"
 	"testing"

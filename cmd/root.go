@@ -4,8 +4,6 @@ import (
 	"context"
 	"github.com/inovacc/moonlight/internal/component"
 	"github.com/spf13/cobra"
-	"log/slog"
-	"os"
 )
 
 var rootCmd = &cobra.Command{
@@ -22,8 +20,5 @@ func Execute() {
 }
 
 func init() {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	slog.SetDefault(logger)
-
 	rootCmd.Flags().StringP("config", "c", "config.yaml", "config file (default is config.yaml)")
 }

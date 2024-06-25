@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"github.com/inovacc/moonlight/internal/cron"
+	"github.com/inovacc/moonlight/pkg/cron"
 	"github.com/inovacc/moonlight/pkg/versions"
 	"github.com/jmoiron/sqlx"
 	"time"

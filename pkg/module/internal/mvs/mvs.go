@@ -315,173 +315,173 @@ func UpgradeAll(target module.Version, reqs UpgradeReqs) ([]module.Version, erro
 //		return m, nil
 //	})
 //}
-
-// Downgrade returns a build list for the target module
-// in which the given additional modules are downgraded,
-// potentially overriding the requirements of the target.
 //
-// The versions to be downgraded may be unreachable from reqs.Latest and
-// reqs.Previous, but the methods of reqs must otherwise handle such versions
-// correctly.
-func Downgrade(target module.Version, reqs DowngradeReqs, downgrade ...module.Version) ([]module.Version, error) {
-	// Per https://research.swtch.com/vgo-mvs#algorithm_4:
-	// “To avoid an unnecessary downgrade to E 1.1, we must also add a new
-	// requirement on E 1.2. We can apply Algorithm R to find the minimal set of
-	// new requirements to write to go.mod.”
-	//
-	// In order to generate those new requirements, we need to identify versions
-	// for every module in the build list — not just reqs.Required(target).
-	list, err := BuildList([]module.Version{target}, reqs)
-	if err != nil {
-		return nil, err
-	}
-	list = list[1:] // remove target
+//// Downgrade returns a build list for the target module
+//// in which the given additional modules are downgraded,
+//// potentially overriding the requirements of the target.
+////
+//// The versions to be downgraded may be unreachable from reqs.Latest and
+//// reqs.Previous, but the methods of reqs must otherwise handle such versions
+//// correctly.
+//func Downgrade(target module.Version, reqs DowngradeReqs, downgrade ...module.Version) ([]module.Version, error) {
+//	// Per https://research.swtch.com/vgo-mvs#algorithm_4:
+//	// “To avoid an unnecessary downgrade to E 1.1, we must also add a new
+//	// requirement on E 1.2. We can apply Algorithm R to find the minimal set of
+//	// new requirements to write to go.mod.”
+//	//
+//	// In order to generate those new requirements, we need to identify versions
+//	// for every module in the build list — not just reqs.Required(target).
+//	list, err := BuildList([]module.Version{target}, reqs)
+//	if err != nil {
+//		return nil, err
+//	}
+//	list = list[1:] // remove target
+//
+//	max := make(map[string]string)
+//	for _, r := range list {
+//		max[r.Path] = r.Version
+//	}
+//	for _, d := range downgrade {
+//		if v, ok := max[d.Path]; !ok || reqs.Max(d.Path, v, d.Version) != d.Version {
+//			max[d.Path] = d.Version
+//		}
+//	}
+//
+//	var (
+//		added    = make(map[module.Version]bool)
+//		rdeps    = make(map[module.Version][]module.Version)
+//		excluded = make(map[module.Version]bool)
+//	)
+//	var exclude func(module.Version)
+//	exclude = func(m module.Version) {
+//		if excluded[m] {
+//			return
+//		}
+//		excluded[m] = true
+//		for _, p := range rdeps[m] {
+//			exclude(p)
+//		}
+//	}
+//	var add func(module.Version)
+//	add = func(m module.Version) {
+//		if added[m] {
+//			return
+//		}
+//		added[m] = true
+//		if v, ok := max[m.Path]; ok && reqs.Max(m.Path, m.Version, v) != v {
+//			// m would upgrade an existing dependency — it is not a strict downgrade,
+//			// and because it was already present as a dependency, it could affect the
+//			// behavior of other relevant packages.
+//			exclude(m)
+//			return
+//		}
+//		list, err := reqs.Required(m)
+//		if err != nil {
+//			// If we can't load the requirements, we couldn't load the go.mod file.
+//			// There are a number of reasons this can happen, but this usually
+//			// means an older version of the module had a missing or invalid
+//			// go.mod file. For example, if example.com/mod released v2.0.0 before
+//			// migrating to modules (v2.0.0+incompatible), then added a valid go.mod
+//			// in v2.0.1, downgrading from v2.0.1 would cause this error.
+//			//
+//			// TODO(golang.org/issue/31730, golang.org/issue/30134): if the error
+//			// is transient (we couldn't download go.mod), return the error from
+//			// Downgrade. Currently, we can't tell what kind of error it is.
+//			exclude(m)
+//			return
+//		}
+//		for _, r := range list {
+//			add(r)
+//			if excluded[r] {
+//				exclude(m)
+//				return
+//			}
+//			rdeps[r] = append(rdeps[r], m)
+//		}
+//	}
+//
+//	downgraded := make([]module.Version, 0, len(list)+1)
+//	downgraded = append(downgraded, target)
+//List:
+//	for _, r := range list {
+//		add(r)
+//		for excluded[r] {
+//			p, err := reqs.Previous(r)
+//			if err != nil {
+//				// This is likely a transient error reaching the repository,
+//				// rather than a permanent error with the retrieved version.
+//				//
+//				// TODO(golang.org/issue/31730, golang.org/issue/30134):
+//				// decode what to do based on the actual error.
+//				return nil, err
+//			}
+//			// If the target version is a pseudo-version, it may not be
+//			// included when iterating over prior versions using reqs.Previous.
+//			// Insert it into the right place in the iteration.
+//			// If v is excluded, p should be returned again by reqs.Previous on the next iteration.
+//			if v := max[r.Path]; reqs.Max(r.Path, v, r.Version) != v && reqs.Max(r.Path, p.Version, v) != p.Version {
+//				p.Version = v
+//			}
+//			if p.Version == "none" {
+//				continue List
+//			}
+//			add(p)
+//			r = p
+//		}
+//		downgraded = append(downgraded, r)
+//	}
+//
+//	// The downgrades we computed above only downgrade to versions enumerated by
+//	// reqs.Previous. However, reqs.Previous omits some versions — such as
+//	// pseudo-versions and retracted versions — that may be selected as transitive
+//	// requirements of other modules.
+//	//
+//	// If one of those requirements pulls the version back up above the version
+//	// identified by reqs.Previous, then the transitive dependencies of that that
+//	// initially-downgraded version should no longer matter — in particular, we
+//	// should not add new dependencies on module paths that nothing else in the
+//	// updated module graph even requires.
+//	//
+//	// In order to eliminate those spurious dependencies, we recompute the build
+//	// list with the actual versions of the downgraded modules as selected by MVS,
+//	// instead of our initial downgrades.
+//	// (See the downhiddenartifact and downhiddencross test cases).
+//	actual, err := BuildList([]module.Version{target}, &override{
+//		target: target,
+//		list:   downgraded,
+//		Reqs:   reqs,
+//	})
+//	if err != nil {
+//		return nil, err
+//	}
+//	actualVersion := make(map[string]string, len(actual))
+//	for _, m := range actual {
+//		actualVersion[m.Path] = m.Version
+//	}
+//
+//	downgraded = downgraded[:0]
+//	for _, m := range list {
+//		if v, ok := actualVersion[m.Path]; ok {
+//			downgraded = append(downgraded, module.Version{Path: m.Path, Version: v})
+//		}
+//	}
+//
+//	return BuildList([]module.Version{target}, &override{
+//		target: target,
+//		list:   downgraded,
+//		Reqs:   reqs,
+//	})
+//}
 
-	max := make(map[string]string)
-	for _, r := range list {
-		max[r.Path] = r.Version
-	}
-	for _, d := range downgrade {
-		if v, ok := max[d.Path]; !ok || reqs.Max(d.Path, v, d.Version) != d.Version {
-			max[d.Path] = d.Version
-		}
-	}
+//type override struct {
+//	target module.Version
+//	list   []module.Version
+//	Reqs
+//}
 
-	var (
-		added    = make(map[module.Version]bool)
-		rdeps    = make(map[module.Version][]module.Version)
-		excluded = make(map[module.Version]bool)
-	)
-	var exclude func(module.Version)
-	exclude = func(m module.Version) {
-		if excluded[m] {
-			return
-		}
-		excluded[m] = true
-		for _, p := range rdeps[m] {
-			exclude(p)
-		}
-	}
-	var add func(module.Version)
-	add = func(m module.Version) {
-		if added[m] {
-			return
-		}
-		added[m] = true
-		if v, ok := max[m.Path]; ok && reqs.Max(m.Path, m.Version, v) != v {
-			// m would upgrade an existing dependency — it is not a strict downgrade,
-			// and because it was already present as a dependency, it could affect the
-			// behavior of other relevant packages.
-			exclude(m)
-			return
-		}
-		list, err := reqs.Required(m)
-		if err != nil {
-			// If we can't load the requirements, we couldn't load the go.mod file.
-			// There are a number of reasons this can happen, but this usually
-			// means an older version of the module had a missing or invalid
-			// go.mod file. For example, if example.com/mod released v2.0.0 before
-			// migrating to modules (v2.0.0+incompatible), then added a valid go.mod
-			// in v2.0.1, downgrading from v2.0.1 would cause this error.
-			//
-			// TODO(golang.org/issue/31730, golang.org/issue/30134): if the error
-			// is transient (we couldn't download go.mod), return the error from
-			// Downgrade. Currently, we can't tell what kind of error it is.
-			exclude(m)
-			return
-		}
-		for _, r := range list {
-			add(r)
-			if excluded[r] {
-				exclude(m)
-				return
-			}
-			rdeps[r] = append(rdeps[r], m)
-		}
-	}
-
-	downgraded := make([]module.Version, 0, len(list)+1)
-	downgraded = append(downgraded, target)
-List:
-	for _, r := range list {
-		add(r)
-		for excluded[r] {
-			p, err := reqs.Previous(r)
-			if err != nil {
-				// This is likely a transient error reaching the repository,
-				// rather than a permanent error with the retrieved version.
-				//
-				// TODO(golang.org/issue/31730, golang.org/issue/30134):
-				// decode what to do based on the actual error.
-				return nil, err
-			}
-			// If the target version is a pseudo-version, it may not be
-			// included when iterating over prior versions using reqs.Previous.
-			// Insert it into the right place in the iteration.
-			// If v is excluded, p should be returned again by reqs.Previous on the next iteration.
-			if v := max[r.Path]; reqs.Max(r.Path, v, r.Version) != v && reqs.Max(r.Path, p.Version, v) != p.Version {
-				p.Version = v
-			}
-			if p.Version == "none" {
-				continue List
-			}
-			add(p)
-			r = p
-		}
-		downgraded = append(downgraded, r)
-	}
-
-	// The downgrades we computed above only downgrade to versions enumerated by
-	// reqs.Previous. However, reqs.Previous omits some versions — such as
-	// pseudo-versions and retracted versions — that may be selected as transitive
-	// requirements of other modules.
-	//
-	// If one of those requirements pulls the version back up above the version
-	// identified by reqs.Previous, then the transitive dependencies of that that
-	// initially-downgraded version should no longer matter — in particular, we
-	// should not add new dependencies on module paths that nothing else in the
-	// updated module graph even requires.
-	//
-	// In order to eliminate those spurious dependencies, we recompute the build
-	// list with the actual versions of the downgraded modules as selected by MVS,
-	// instead of our initial downgrades.
-	// (See the downhiddenartifact and downhiddencross test cases).
-	actual, err := BuildList([]module.Version{target}, &override{
-		target: target,
-		list:   downgraded,
-		Reqs:   reqs,
-	})
-	if err != nil {
-		return nil, err
-	}
-	actualVersion := make(map[string]string, len(actual))
-	for _, m := range actual {
-		actualVersion[m.Path] = m.Version
-	}
-
-	downgraded = downgraded[:0]
-	for _, m := range list {
-		if v, ok := actualVersion[m.Path]; ok {
-			downgraded = append(downgraded, module.Version{Path: m.Path, Version: v})
-		}
-	}
-
-	return BuildList([]module.Version{target}, &override{
-		target: target,
-		list:   downgraded,
-		Reqs:   reqs,
-	})
-}
-
-type override struct {
-	target module.Version
-	list   []module.Version
-	Reqs
-}
-
-func (r *override) Required(m module.Version) ([]module.Version, error) {
-	if m == r.target {
-		return r.list, nil
-	}
-	return r.Reqs.Required(m)
-}
+//func (r *override) Required(m module.Version) ([]module.Version, error) {
+//	if m == r.target {
+//		return r.list, nil
+//	}
+//	return r.Reqs.Required(m)
+//}
