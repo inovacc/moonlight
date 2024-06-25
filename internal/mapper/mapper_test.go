@@ -1,6 +1,7 @@
 package mapper
 
 import (
+	"context"
 	"github.com/inovacc/moonlight/pkg/database"
 	"github.com/inovacc/moonlight/pkg/versions"
 	"github.com/stretchr/testify/assert"
@@ -17,7 +18,7 @@ func TestNewMapVersions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mapVerse, err := NewMapVersions(database.GetConnection(), goVer)
+	mapVerse, err := NewMapVersions(context.TODO(), database.GetConnection(), goVer)
 	if err != nil {
 		t.Fatal(err)
 	}

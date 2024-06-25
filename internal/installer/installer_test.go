@@ -19,7 +19,7 @@ func TestNewInstaller(t *testing.T) {
 		t.Error("Expected database to be initialized")
 	}
 
-	installer, err := NewInstaller(context.Background(), database.GetConnection())
+	installer, err := NewInstaller(context.TODO(), database.GetConnection())
 	if err != nil {
 		t.Fatal(err)
 	}
