@@ -1,3 +1,13 @@
-proxyServers:
-  - https://proxy.golang.org,direct
-  - https://goproxy.cn,direct
+logger:
+  logLevel: INFO
+  logFormat: json
+  fileName: moonlight.log
+  maxSize: 100
+  maxAge: 7
+  maxBackups: 10
+  localTime: true
+  compress: true
+db:
+  driver: sqlite3
+  dbName: store
+  dbPath: C:\Users\ddaniels\AppData\Local\Temp

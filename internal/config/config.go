@@ -4,20 +4,15 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/fsnotify/fsnotify"
+	"github.com/inovacc/moonlight/pkg/logger"
 	"github.com/spf13/afero"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 	"log/slog"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 )
-
-func init() {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	slog.SetDefault(logger)
-}
 
 var GetConfig *Config
 
@@ -30,8 +25,13 @@ func init() {
 		initWG:   sync.WaitGroup{},
 		eventsWG: sync.WaitGroup{},
 		Logger: Logger{
-			LogLevel:  LevelInfo,
-			LogFormat: JSONLogFormat,
+			LogLevel:   slog.LevelDebug,
+			LogFormat:  JSONLogFormat,
+			MaxSize:    100,
+			MaxAge:     7,
+			MaxBackups: 10,
+			LocalTime:  true,
+			Compress:   true,
 		},
 		Db: Db{
 			Driver: SQLiteNamedDriver,
@@ -42,7 +42,7 @@ func init() {
 }
 
 const (
-	SQLiteNamedDriver string = "sqlite"
+	SQLiteNamedDriver string = "sqlite3"
 )
 
 type LogFormat string
@@ -52,17 +52,15 @@ const (
 	TextLogFormat LogFormat = "text"
 )
 
-type LevelName string
-
-const (
-	LevelDebug LevelName = "debug"
-	LevelInfo  LevelName = "info"
-	LevelError LevelName = "error"
-)
-
 type Logger struct {
-	LogLevel  LevelName `yaml:"logLevel" mapstructure:"logLevel" json:"logLevel"`
-	LogFormat LogFormat `yaml:"logFormat" mapstructure:"logFormat" json:"logFormat"`
+	LogLevel   slog.Level `yaml:"logLevel" mapstructure:"logLevel" json:"logLevel"`
+	LogFormat  LogFormat  `yaml:"logFormat" mapstructure:"logFormat" json:"logFormat"`
+	FileName   string     `yaml:"fileName" mapstructure:"fileName" json:"fileName"`
+	MaxSize    int        `yaml:"maxSize" mapstructure:"maxSize" json:"maxSize"`
+	MaxAge     int        `yaml:"maxAge" mapstructure:"maxAge" json:"maxAge"`
+	MaxBackups int        `yaml:"maxBackups" mapstructure:"maxBackups" json:"maxBackups"`
+	LocalTime  bool       `yaml:"localTime" mapstructure:"localTime" json:"localTime"`
+	Compress   bool       `yaml:"compress" mapstructure:"compress" json:"compress"`
 }
 
 type Db struct {
@@ -87,8 +85,8 @@ type Config struct {
 }
 
 func (c *Config) defaultValues() error {
-	if c.Logger.LogLevel == "" {
-		c.Logger.LogLevel = LevelInfo
+	if c.Logger.FileName == "" {
+		c.Logger.FileName = "moonlight.log"
 	}
 
 	if c.Logger.LogFormat == "" {
@@ -257,31 +255,6 @@ func (c *Config) ReadInConfig() error {
 	return nil
 }
 
-// WithSqliteDB sets sqlite db path name
-func WithSqliteDB(name, path string) OptsFunc {
-	if !strings.HasSuffix(path, ".sqlite") {
-		path = fmt.Sprintf("%s.sqlite", path)
-	}
-	return func(o *Config) {
-		o.Db.Dbname = name
-		o.Db.DBPath = path
-	}
-}
-
-// WithLogLevel sets log level, e.g. info, debug, error
-func WithLogLevel(logLevel LevelName) OptsFunc {
-	return func(o *Config) {
-		o.Logger.LogLevel = logLevel
-	}
-}
-
-// WithLogFormat sets log format
-func WithLogFormat(logFormat LogFormat) OptsFunc {
-	return func(o *Config) {
-		o.Logger.LogFormat = logFormat
-	}
-}
-
 // NewConfig creates a new service configuration
 func NewConfig(opts ...OptsFunc) {
 	for _, fn := range opts {
@@ -305,6 +278,24 @@ func SetConfig(cfgFile string) {
 		slog.Error(fmt.Sprintf("read in config: %s", err))
 		os.Exit(1)
 	}
+
+	if err = GetConfig.defaultValues(); err != nil {
+		slog.Error(fmt.Sprintf("default values: %s", err))
+		os.Exit(1)
+	}
+
+	opts := &slog.HandlerOptions{
+		Level: slog.Leveler(GetConfig.Logger.LogLevel),
+	}
+
+	logger.NewLoggerWithJSONRotator(logger.NewRotatorHandler(
+		GetConfig.Logger.FileName,
+		GetConfig.Logger.MaxSize,
+		GetConfig.Logger.MaxAge,
+		GetConfig.Logger.MaxBackups,
+		GetConfig.Logger.LocalTime,
+		GetConfig.Logger.Compress,
+	), opts)
 
 	GetConfig.WatchConfig()
 }
