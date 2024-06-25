@@ -14,7 +14,10 @@ import (
 	"sync"
 )
 
-var GetConfig *Config
+var (
+	GetConfig *Config
+	logLevel  = slog.LevelDebug
+)
 
 // SupportedExts are universally supported extensions.
 var SupportedExts = []string{"json", "yaml", "yml"}
@@ -25,7 +28,7 @@ func init() {
 		initWG:   sync.WaitGroup{},
 		eventsWG: sync.WaitGroup{},
 		Logger: Logger{
-			LogLevel:   slog.LevelDebug,
+			LogLevel:   slog.LevelDebug.String(),
 			LogFormat:  JSONLogFormat,
 			MaxSize:    100,
 			MaxAge:     7,
@@ -53,14 +56,14 @@ const (
 )
 
 type Logger struct {
-	LogLevel   slog.Level `yaml:"logLevel" mapstructure:"logLevel" json:"logLevel"`
-	LogFormat  LogFormat  `yaml:"logFormat" mapstructure:"logFormat" json:"logFormat"`
-	FileName   string     `yaml:"fileName" mapstructure:"fileName" json:"fileName"`
-	MaxSize    int        `yaml:"maxSize" mapstructure:"maxSize" json:"maxSize"`
-	MaxAge     int        `yaml:"maxAge" mapstructure:"maxAge" json:"maxAge"`
-	MaxBackups int        `yaml:"maxBackups" mapstructure:"maxBackups" json:"maxBackups"`
-	LocalTime  bool       `yaml:"localTime" mapstructure:"localTime" json:"localTime"`
-	Compress   bool       `yaml:"compress" mapstructure:"compress" json:"compress"`
+	LogLevel   string    `yaml:"logLevel" mapstructure:"logLevel" json:"logLevel"`
+	LogFormat  LogFormat `yaml:"logFormat" mapstructure:"logFormat" json:"logFormat"`
+	FileName   string    `yaml:"fileName" mapstructure:"fileName" json:"fileName"`
+	MaxSize    int       `yaml:"maxSize" mapstructure:"maxSize" json:"maxSize"`
+	MaxAge     int       `yaml:"maxAge" mapstructure:"maxAge" json:"maxAge"`
+	MaxBackups int       `yaml:"maxBackups" mapstructure:"maxBackups" json:"maxBackups"`
+	LocalTime  bool      `yaml:"localTime" mapstructure:"localTime" json:"localTime"`
+	Compress   bool      `yaml:"compress" mapstructure:"compress" json:"compress"`
 }
 
 type Db struct {
@@ -87,6 +90,23 @@ type Config struct {
 func (c *Config) defaultValues() error {
 	if c.Logger.FileName == "" {
 		c.Logger.FileName = "moonlight.log"
+	}
+
+	switch c.Logger.LogLevel {
+	case slog.LevelDebug.String():
+		logLevel = slog.LevelDebug
+	case slog.LevelInfo.String():
+		logLevel = slog.LevelInfo
+	case slog.LevelWarn.String():
+		logLevel = slog.LevelWarn
+	case slog.LevelError.String():
+		logLevel = slog.LevelError
+	default:
+		return fmt.Errorf("unknown log level: %s", c.Logger.LogLevel)
+	}
+
+	if c.Logger.LogLevel == "" {
+		c.Logger.LogLevel = logLevel.String()
 	}
 
 	if c.Logger.LogFormat == "" {
@@ -285,7 +305,7 @@ func SetConfig(cfgFile string) {
 	}
 
 	opts := &slog.HandlerOptions{
-		Level: slog.Leveler(GetConfig.Logger.LogLevel),
+		Level: logLevel,
 	}
 
 	logger.NewLoggerWithJSONRotator(logger.NewRotatorHandler(
